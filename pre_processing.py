@@ -84,17 +84,17 @@ patches_val, patches_val_ref = discard_patches_by_percentage(patches_val, patche
 patches_tst, patches_tst_ref = discard_patches_by_percentage(patches_tst, patches_tst_ref, config['patch_size'], config['min_percentage'])
 del image_array, final_mask
 
-print('Filtered the patches by a minimum of', str(config['min_percentage'])), '% of deforestation.')
+print('Filtered the patches by a minimum of', str(config['min_percentage']), '% of deforestation.')
 print('[*] Training patches:', patches_trn.shape)
 print('[*] Validation patches:', patches_val.shape)
 print('[*] Testing patches:', patches_tst.shape)
 
 print('Saving training patches...')
-write_patches_to_disk(patches_trn, patches_trn_ref, trn_out_path)
+# write_patches_to_disk(patches_trn, patches_trn_ref, trn_out_path)
 print('Saving validation patches...')
-write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
+# write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
 print('Saving testing patches...')
-write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
+# write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
 del patches_tst, patches_tst_ref
 
 ################### EXTRACT MINIPATCHES (FOREST AND DEFORESTATION)
