@@ -147,7 +147,19 @@ def write_patches_to_disk(patches, patches_ref, out_path):
         np.save(trn_out_path + '/imgs/' + str(i) + '.npy', patches[i])
         np.save(trn_out_path + '/masks/' + str(i) + '.npy', patches_ref[i])
         counter += 1
-        
+
+def save_minipatches(patches_list, patches_ref_list, out_path):
+    counter = 0
+    counter_ = 0
+    for idx in range(patches_list.shape[0]):
+        # print('idx:', idx)
+        patches, patches_ref, found_patch = extract_minipatches_from_patch(patches_list[idx], patches_ref_list[idx],
+        config['minipatch_size'], mini_stride, idx, out_path)
+        if found_patch == list([1, 1]): # save only patches in pairs
+            np.save(out_path + '/texture_class_0/' + str(idx) + '.npy', patches[0])
+            np.save(out_path + '/texture_class_1/' + str(idx) + '.npy', patches[1])
+            counter_ +=1
+        counter+=1
 
 def extract_minipatches_from_patch(input_image, reference, minipatch_size, mini_stride, index, out_path):
     window_shape = minipatch_size

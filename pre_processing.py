@@ -116,34 +116,9 @@ os.makedirs(val_out_path + '/texture_class_1_debug', exist_ok=True)
 # os.makedirs(tst_out_path + '/texture_class_0_debug', exist_ok=True)
 # os.makedirs(tst_out_path + '/texture_class_1_debug', exist_ok=True)
 
-
-# training
-counter = 0
-counter_ = 0
 print('[*] Saving training minipatches.')
-for idx in range(patches_trn.shape[0]):
-    # print('idx:', idx)
-    patches, patches_ref, found_patch = extract_minipatches_from_patch(patches_trn[idx], patches_trn_ref[idx],
-    config['minipatch_size'], mini_stride, idx, trn_out_path)
-    if found_patch == list([1, 1]): # save only patches in pairs
-        np.save(trn_out_path + '/texture_class_0/' + str(idx) + '.npy', patches[0])
-        np.save(trn_out_path + '/texture_class_1/' + str(idx) + '.npy', patches[1])
-        counter_ +=1
-    counter+=1
-print('Training minipatches:', counter, counter_)
-
-# validation
-counter = 0
-counter_ = 0
+save_minipatches(patches_trn, patches_trn_ref, trn_out_path)
 print('[*] Saving validation minipatches.')
-for idx in range(patches_val.shape[0]):
-    patches, patches_ref, found_patch = extract_minipatches_from_patch(patches_val[idx], patches_val_ref[idx], 
-    config['minipatch_size'], mini_stride, idx, val_out_path)
-    if found_patch == list([1, 1]): # save only patches in pairs
-        np.save(val_out_path + '/texture_class_0/' + str(idx) + '.npy', patches[0])
-        np.save(val_out_path + '/texture_class_1/' + str(idx) + '.npy', patches[1])
-        counter_ +=1
-    counter+=1
-print('Training minipatches:', counter, counter_)
+save_minipatches(patches_val, patches_val_ref, val_out_path)
 
 print('[*] Preprocessing done.')
