@@ -74,8 +74,8 @@ for ts_ in tiles_ts:
     mask_amazon_ts[mask_tiles == ts_] = 1
 
 
-print('[*]Patch size:', config['patch_size'])
-print('[*]Stride:', stride)
+# print('[*]Patch size:', config['patch_size'])
+# print('[*]Stride:', stride)
 patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
 patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
 patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, config['patch_size'], stride)
@@ -92,9 +92,9 @@ print('[*] Testing patches:', patches_tst.shape)
 print('Saving training patches...')
 # write_patches_to_disk(patches_trn, patches_trn_ref, trn_out_path)
 print('Saving validation patches...')
-# write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
+write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
 print('Saving testing patches...')
-# write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
+write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
 del patches_tst, patches_tst_ref
 
 ################### EXTRACT MINIPATCHES (FOREST AND DEFORESTATION)
@@ -117,8 +117,8 @@ os.makedirs(val_out_path + '/texture_class_1_debug', exist_ok=True)
 # os.makedirs(tst_out_path + '/texture_class_1_debug', exist_ok=True)
 
 print('[*] Saving training minipatches.')
-save_minipatches(patches_trn, patches_trn_ref, trn_out_path)
+save_minipatches(patches_trn, patches_trn_ref, trn_out_path, mini_stride, config)
 print('[*] Saving validation minipatches.')
-save_minipatches(patches_val, patches_val_ref, val_out_path)
+save_minipatches(patches_val, patches_val_ref, val_out_path, mini_stride, config)
 
 print('[*] Preprocessing done.')

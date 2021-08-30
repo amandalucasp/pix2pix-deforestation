@@ -41,28 +41,28 @@ def get_dataset(config):
     sent2_2019 = filter_outliers(sent2_2019.copy())
 
     if config['two_classes_problem']:
-        print('Deforestation/Forest Segmentation.')
+        # print('Deforestation/Forest Segmentation.')
         image_stack = sent2_2019
         del sent2_2019
     else:
         image_stack = np.concatenate((sent2_2018, sent2_2019), axis=-1)
         del sent2_2018, sent2_2019
 
-    print('Image stack:', image_stack.shape)
+    # print('Image stack:', image_stack.shape)
 
     final_mask = np.load(config['root_path']+'final_mask_label.npy').astype('float32')
     # 0: forest, 1: new deforestation, 2: old deforestation
 
-    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
+    # print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
     # change into only forest and deforestation:
     if config['two_classes_problem']:
         final_mask[final_mask == 2] = 1
-        print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
+    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
 
     final_mask = final_mask[:config['lim_x'], :config['lim_y']]
     image_stack = image_stack[:config['lim_x'], :config['lim_y'], :]
     h_, w_, channels = image_stack.shape
-    print('image stack size: ', image_stack.shape)
+    print('image_stack size: ', image_stack.shape)
 
     return image_stack, final_mask
 
@@ -144,11 +144,11 @@ def get_only_texture_minipatches(all_patches_array, all_patches_ref, index, out_
 def write_patches_to_disk(patches, patches_ref, out_path):
     counter = 0
     for i in range(patches.shape[0]):
-        np.save(trn_out_path + '/imgs/' + str(i) + '.npy', patches[i])
-        np.save(trn_out_path + '/masks/' + str(i) + '.npy', patches_ref[i])
+        np.save(out_path + '/imgs/' + str(i) + '.npy', patches[i])
+        np.save(out_path + '/masks/' + str(i) + '.npy', patches_ref[i])
         counter += 1
 
-def save_minipatches(patches_list, patches_ref_list, out_path):
+def save_minipatches(patches_list, patches_ref_list, out_path, mini_stride, config):
     counter = 0
     counter_ = 0
     for idx in range(patches_list.shape[0]):
