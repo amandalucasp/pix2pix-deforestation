@@ -29,11 +29,11 @@ def get_dataset(config):
     sent2_2019 = np.concatenate((sent2_2019_1, sent2_2019_2), axis=-1)
     del sent2_2019_1, sent2_2019_2
 
-    if config['only_bgr_channels']:
-        print('Using only NIR-G-B channels.')
-        if not config['two_classes_problem']:
-            sent2_2018 = sent2_2018[:, :, config['channels']]       
-        sent2_2019 = sent2_2019[:, :, config['channels']]
+    # if config['only_bgr_channels']:
+        # print('Using only NIR-G-B channels.')
+    if not config['two_classes_problem']:
+        sent2_2018 = sent2_2018[:, :, config['channels']]       
+    sent2_2019 = sent2_2019[:, :, config['channels']]
     
     # Filter outliers
     if not config['two_classes_problem']:
