@@ -1,5 +1,6 @@
 import gdal
 import skimage
+import cv2
 import scipy.misc
 import numpy as np
 from PIL import Image

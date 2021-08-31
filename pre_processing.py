@@ -1,6 +1,7 @@
 import yaml
 import gdal
 import skimage
+import cv2
 import scipy.misc
 import numpy as np
 from PIL import Image
@@ -76,16 +77,16 @@ for ts_ in tiles_ts:
 
 # print('[*]Patch size:', config['patch_size'])
 # print('[*]Stride:', stride)
-patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
+# patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
 patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
 patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, config['patch_size'], stride)
-patches_trn, patches_trn_ref = discard_patches_by_percentage(patches_trn, patches_trn_ref, config['patch_size'], config['min_percentage'])
+# patches_trn, patches_trn_ref = discard_patches_by_percentage(patches_trn, patches_trn_ref, config['patch_size'], config['min_percentage'])
 patches_val, patches_val_ref = discard_patches_by_percentage(patches_val, patches_val_ref, config['patch_size'], config['min_percentage'])
 patches_tst, patches_tst_ref = discard_patches_by_percentage(patches_tst, patches_tst_ref, config['patch_size'], config['min_percentage'])
 del image_array, final_mask
 
 print('Filtered the patches by a minimum of', str(config['min_percentage']), '% of deforestation.')
-print('[*] Training patches:', patches_trn.shape)
+# print('[*] Training patches:', patches_trn.shape)
 print('[*] Validation patches:', patches_val.shape)
 print('[*] Testing patches:', patches_tst.shape)
 
@@ -95,6 +96,30 @@ print('Saving validation patches...')
 write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
 print('Saving testing patches...')
 write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
+
+################### COMBINE PATCHES INTO INPUT FORMAT FOR PIX2PIX
+
+os.makedirs(trn_out_path + '/pairs', exist_ok=True)
+os.makedirs(val_out_path + '/pairs', exist_ok=True)
+os.makedirs(tst_out_path + '/pairs', exist_ok=True)
+
+def save_image_pairs(patches_list, patches_ref_list, pairs_path):
+    counter = 0
+    h, w, c = patches_list[0].shape
+    for i in range(patches_list.shape[0]):
+        combined = np.zeros(shape=(h,w*2,c))
+        combined[:,:w,:] = patches_list[i]
+        # converted = cv2.cvtColor(patches_ref_list[i], cv2.COLOR_GRAY2BGR) # convert to 3-channel image
+        # converted = converted*255 # verificar se precisa msm, acho que n faz diferenca 
+        combined[:,w:,:] = cv2.cvtColor(patches_ref_list[i], cv2.COLOR_GRAY2BGR) # convert to 3-channel image
+        np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
+        scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '.jpg', combined)
+        counter += 1
+
+# save_image_pairs(patches_trn, patches_trn_ref, trn_out_path)
+save_image_pairs(patches_val, patches_val_ref, val_out_path)
+save_image_pairs(patches_tst, patches_tst_ref, tst_out_path)
+
 del patches_tst, patches_tst_ref
 
 ################### EXTRACT MINIPATCHES (FOREST AND DEFORESTATION)
