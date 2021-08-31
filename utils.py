@@ -19,7 +19,7 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path):
         combined[:,:w,:] = patches_list[i]
         # converted = cv2.cvtColor(patches_ref_list[i], cv2.COLOR_GRAY2BGR) # convert to 3-channel image
         converted = cv2.cvtColor(patches_ref_list[i], cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-        combined[:,w:,:] = 255*converted # convert to 3-channel image
+        combined[:,w:,:] = converted # convert to 3-channel image
         np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
         scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '.jpg', combined)
         counter += 1
