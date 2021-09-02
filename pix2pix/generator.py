@@ -171,7 +171,7 @@ def generate_images(model, test_input, tar, filename):
     plt.axis('off')
   fig.savefig(filename)
 
-"""Test the function:"""
-
-for example_input, example_target in test_dataset.take(1):
-  generate_images(generator, example_input, example_target)
+#"""Test the function:"""
+#
+#for example_input, example_target in test_dataset.take(1):
+#  generate_images(generator, example_input, example_target)
