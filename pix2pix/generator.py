@@ -156,11 +156,11 @@ Note: The `training=True` is intentional here since
 you want the batch statistics, while running the model on the test dataset. If you use `training=False`, you get the accumulated statistics learned from the training dataset (which you don't want).
 """
 
-def generate_images(model, test_input, tar, filename):
+def generate_images(model, test_input, target, filename):
   prediction = model(test_input, training=True)
   fig = plt.figure(figsize=(15, 15))
 
-  display_list = [test_input[0], tar[0], prediction[0]]
+  display_list = [test_input[0], target[0], prediction[0]]
   title = ['Input Image', 'Ground Truth', 'Predicted Image']
 
   for i in range(3):
