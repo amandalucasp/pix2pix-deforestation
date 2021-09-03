@@ -9,14 +9,14 @@ output_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples_new_split' # 
 lim_x: 17000 # 1000
 lim_y: 9200 # 7000
 channels: [1, 2, 3] # quais canais usar da imagem
-# 0 - blue
-# 1 - green
-# 2 - red
-# 3 - NIR
-# 4 - vegetation red edge (0.705 um)
-# 5 - vegetation red edge (0.740 um)
-# 6 - vegetation red edge (0.783 um)
-# 7 - vegetation red edge (0.865 um)
-# 8 - SWIR (1.610 um)
-# 9 - SWIR (2.190um)
+# 0 - blue [10m]
+# 1 - green [10m]
+# 2 - red [10m]
+# 3 - NIR [10m]
+# 4 - vegetation red edge (0.705 um) [20m]
+# 5 - vegetation red edge (0.740 um) [20m]
+# 6 - vegetation red edge (0.783 um) [20m]
+# 7 - vegetation red edge (0.865 um) [20m]
+# 8 - SWIR (1.610 um) [20m]
+# 9 - SWIR (2.190um) [20m]
 minipatch_size: 32
