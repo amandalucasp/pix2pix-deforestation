@@ -8,7 +8,7 @@ root_path: '../Sentinel2/' # path to images
 output_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples_new_split' # path to save patches
 lim_x: 17000 # 1000
 lim_y: 9200 # 7000
-channels: [1, 2, 3] # quais canais usar da imagem
+channels: [0, 1, 3] # quais canais usar da imagem
 # 0 - blue [10m]
 # 1 - green [10m]
 # 2 - red [10m]
