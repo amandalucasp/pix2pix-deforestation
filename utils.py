@@ -12,18 +12,28 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
 def save_image_pairs(patches_list, patches_ref_list, pairs_path):
+    os.makedirs(pairs_path + '/pairs', exist_ok=True)
     counter = 0
     h, w, c = patches_list[0].shape
     for i in range(patches_list.shape[0]):
+        # scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_patch.npy', patches_list[i])
+        # scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_patch_ref.npy', patches_ref_list[i])
+        np.save(pairs_path + '/pairs/' + str(i) + '_patch.npy',  patches_list[i])
+        np.save(pairs_path + '/pairs/' + str(i) + '_patch_ref.npy', patches_ref_list[i])
+        print('np.unique(patches_ref_list[i]):', np.unique(patches_ref_list[i]))
         combined = np.zeros(shape=(h,w*2,c))
         combined[:,:w,:] = patches_list[i]
-        # converted = cv2.cvtColor(patches_ref_list[i], cv2.COLOR_GRAY2BGR) # convert to 3-channel image
-        converted = cv2.cvtColor(patches_ref_list[i], cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
+        scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_1.jpg', combined)
+        converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
+        print('np.unique(converted):', np.unique(converted))
+        converted = 255*converted
+        print('np.unique(converted):', np.unique(converted))
+        scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_converted.jpg', converted)
         combined[:,w:,:] = converted # convert to 3-channel image
         np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
-        scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '.jpg', combined)
+        scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_3.jpg', combined)
         counter += 1
-
+        exit()
 
 def get_dataset(config):
     print('[*]Loading dataset')
@@ -44,8 +54,6 @@ def get_dataset(config):
     sent2_2019 = np.concatenate((sent2_2019_1, sent2_2019_2), axis=-1)
     del sent2_2019_1, sent2_2019_2
 
-    # if config['only_bgr_channels']:
-        # print('Using only NIR-G-B channels.')
     if not config['two_classes_problem']:
         sent2_2018 = sent2_2018[:, :, config['channels']]       
     sent2_2019 = sent2_2019[:, :, config['channels']]
@@ -163,11 +171,13 @@ def write_patches_to_disk(patches, patches_ref, out_path):
         np.save(out_path + '/masks/' + str(i) + '.npy', patches_ref[i])
         counter += 1
 
-def save_minipatches(patches_list, patches_ref_list, out_path, mini_stride, config):
+def save_minipatches(patches_list, patches_ref_list, out_path, config):
+    mini_stride = int(config['minipatch_size']/4)
+    os.makedirs(out_path + '/texture_class_0', exist_ok=True)
+    os.makedirs(out_path + '/texture_class_1', exist_ok=True)
     counter = 0
     counter_ = 0
     for idx in range(patches_list.shape[0]):
-        # print('idx:', idx)
         patches, patches_ref, found_patch = extract_minipatches_from_patch(patches_list[idx], patches_ref_list[idx],
         config['minipatch_size'], mini_stride, idx, out_path)
         if found_patch == list([1, 1]): # save only patches in pairs
@@ -193,7 +203,9 @@ def extract_minipatches_from_patch(input_image, reference, minipatch_size, mini_
     return patches, patches_ref, found_patch
 
 
-def discard_patches_by_percentage(patches, patches_ref, patch_size, percentage = 2):
+def discard_patches_by_percentage(patches, patches_ref, config):
+    patch_size = config['patch_size']
+    percentage = config['min_percentage']
     patches_ = []
     patches_ref_ = []
     for i in range(len(patches)):
@@ -368,6 +380,8 @@ def resize_image(image, height, width):
 
 def normalization(image, norm_type=1):
     image_reshaped = image.reshape((image.shape[0] * image.shape[1]), image.shape[2])
+    if (norm_type == 0):
+        scaler = MinMaxScaler(feature_range=(0, 255))
     if (norm_type == 1):
         scaler = StandardScaler()
     if (norm_type == 2):
