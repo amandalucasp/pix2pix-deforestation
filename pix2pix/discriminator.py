@@ -72,3 +72,4 @@ def discriminator_loss(disc_real_output, disc_generated_output):
 To learn more about the architecture and the hyperparameters you can refer to the [pix2pix paper](https://arxiv.org/abs/1611.07004).
 
 ![Discriminator Update Image](https://github.com/tensorflow/docs/blob/master/site/en/tutorials/generative/images/dis.png?raw=1)
+"""

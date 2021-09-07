@@ -33,9 +33,9 @@ def downsample(filters, size, apply_batchnorm=True):
 
   return result
 
-down_model = downsample(3, 4)
-down_result = down_model(tf.expand_dims(inp, 0))
-print (down_result.shape)
+# down_model = downsample(3, 4)
+# down_result = down_model(tf.expand_dims(inp, 0))
+# print (down_result.shape)
 
 """Define the upsampler (decoder):"""
 
@@ -58,9 +58,9 @@ def upsample(filters, size, apply_dropout=False):
 
   return result
 
-up_model = upsample(3, 4)
-up_result = up_model(down_result)
-print (up_result.shape)
+# up_model = upsample(3, 4)
+# up_result = up_model(down_result)
+# print (up_result.shape)
 
 """Define the generator with the downsampler and the upsampler:"""
 

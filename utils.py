@@ -11,29 +11,23 @@ from skimage.util import view_as_windows
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
-def save_image_pairs(patches_list, patches_ref_list, pairs_path):
+def save_image_pairs(patches_list, patches_ref_list, pairs_path, config):
     os.makedirs(pairs_path + '/pairs', exist_ok=True)
     counter = 0
     h, w, c = patches_list[0].shape
     for i in range(patches_list.shape[0]):
-        # scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_patch.npy', patches_list[i])
-        # scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_patch_ref.npy', patches_ref_list[i])
-        np.save(pairs_path + '/pairs/' + str(i) + '_patch.npy',  patches_list[i])
-        np.save(pairs_path + '/pairs/' + str(i) + '_patch_ref.npy', patches_ref_list[i])
-        print('np.unique(patches_ref_list[i]):', np.unique(patches_ref_list[i]))
         combined = np.zeros(shape=(h,w*2,c))
         combined[:,:w,:] = patches_list[i]
-        scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_1.jpg', combined)
         converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-        print('np.unique(converted):', np.unique(converted))
-        converted = 255*converted
-        print('np.unique(converted):', np.unique(converted))
-        scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_converted.jpg', converted)
-        combined[:,w:,:] = converted # convert to 3-channel image
+        if config['type_norm'] == 0: # image is [0,255]
+            converted = 255*converted
+        combined[:,w:,:] = converted
         np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
-        scipy.misc.imsave(pairs_path + '/pairs/' + str(i) + '_3.jpg', combined)
+        if config['debug_mode'] and config['two_classes_problem']:
+            cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
+            # scipy.misc.imsave()
         counter += 1
-        exit()
+
 
 def get_dataset(config):
     print('[*]Loading dataset')
@@ -70,8 +64,6 @@ def get_dataset(config):
     else:
         image_stack = np.concatenate((sent2_2018, sent2_2019), axis=-1)
         del sent2_2018, sent2_2019
-
-    # print('Image stack:', image_stack.shape)
 
     final_mask = np.load(config['root_path']+'final_mask_label.npy').astype('float32')
     # 0: forest, 1: new deforestation, 2: old deforestation

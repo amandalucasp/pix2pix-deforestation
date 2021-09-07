@@ -1,12 +1,14 @@
- # usa a mascara como mascara binaria com 2 classes (desmatamento e nao desmatamento)
- # e considera apenas a imagem T2
+debug_mode: True
+# usa a mascara como mascara binaria com 2 classes (desmatamento e nao desmatamento)
+# e considera apenas a imagem T2
 two_classes_problem: True
 # tiles usados para treinamento e validacao
 tiles_tr: [1,3,5,7,8,10,11,13,14,16,18,20,4,6,19]
 tiles_val: [2, 9, 12]
 # stride is set to 0.5*patch_size
 patch_size: 256
-# minimum deforestation required per patch
+save_patches: False # if False, save only image pairs (expected input from pix2pix net)
+# minimum deforestation required per patch (class 1)
 min_percentage: 7 
 # path to images
 root_path: '../Sentinel2/' 
@@ -17,7 +19,7 @@ lim_x: 17000 # 1000
 lim_y: 9200 # 7000
 # tipo de normalizacao utilizada. ps.: o codigo do pix2pix ja faz a normalizacao entre [0,1]
 # 0: MinMax(0,255), 1: Standard, 2: MinMax(0,1), 3: MinMax(-1,1)
-type_norm: 2 
+type_norm: 0
 # quais bandas serao utilizadas
 channels: [0, 1, 3] 
 # 0 - blue *

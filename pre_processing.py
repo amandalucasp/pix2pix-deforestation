@@ -25,9 +25,10 @@ image_array = normalization(image_stack.copy(), config['type_norm'])
 del image_stack
 
 sample = image_array[:500,:500,:]
-cv2.imwrite('image_array_cv2.png', sample*255)
+sample_mask = final_mask[:500, :500]
+cv2.imwrite('image_array_cv2.png', sample)
 scipy.misc.imsave('image_array.png', sample)
-scipy.misc.imsave('final_mask.png', sample)
+scipy.misc.imsave('final_mask.png', sample_mask)
 
 # Print percentage of each class (whole image)
 print('Total no-deforestaion class is {}'.format(len(final_mask[final_mask==0])))
@@ -64,29 +65,33 @@ patches_val, patches_val_ref = discard_patches_by_percentage(patches_val, patche
 patches_tst, patches_tst_ref = discard_patches_by_percentage(patches_tst, patches_tst_ref, config)
 del image_array, final_mask
 
-print('Filtered the patches by a minimum of', str(config['min_percentage']), '% of deforestation.')
 print('[*] Training patches:', patches_trn.shape)
 print('[*] Validation patches:', patches_val.shape)
 print('[*] Testing patches:', patches_tst.shape)
 
-print('Saving training patches...')
-# write_patches_to_disk(patches_trn, patches_trn_ref, trn_out_path)
-print('Saving validation patches...')
-# write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
-print('Saving testing patches...')
-# write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
+if config['save_patches']:
+    print("[*] SAVING PATCHES")
+    print('Saving training patches...')
+    write_patches_to_disk(patches_trn, patches_trn_ref, trn_out_path)
+    print('Saving validation patches...')
+    write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
+    print('Saving testing patches...')
+    write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
 
 ################### COMBINE PATCHES INTO INPUT FORMAT FOR PIX2PIX
 
 print("[*] SAVING IMAGE PAIRS")
-save_image_pairs(patches_trn, patches_trn_ref, trn_out_path)
-save_image_pairs(patches_val, patches_val_ref, val_out_path)
-save_image_pairs(patches_tst, patches_tst_ref, tst_out_path)
+print('Saving training pairs...')
+save_image_pairs(patches_trn, patches_trn_ref, trn_out_path, config)
+print('Saving validation pairs...')
+save_image_pairs(patches_val, patches_val_ref, val_out_path, config)
+print('Saving testing pairs...')
+save_image_pairs(patches_tst, patches_tst_ref, tst_out_path, config)
 del patches_tst, patches_tst_ref
 
 ################### EXTRACT MINIPATCHES (FOREST AND DEFORESTATION)
 
-if extract_minipatches:
+if config['extract_minipatches']:
     print("EXTRACTING MINIPATCHES")
     print('[*] Saving training minipatches.')
     save_minipatches(patches_trn, patches_trn_ref, trn_out_path, config)

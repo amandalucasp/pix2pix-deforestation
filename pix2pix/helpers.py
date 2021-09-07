@@ -1,12 +1,14 @@
+from matplotlib import pyplot as plt
 import tensorflow as tf
-import os
+import numpy as np
+import datetime
 import pathlib
 import time
-import datetime
-from matplotlib import pyplot as plt
-from IPython import display
 import os
-import pathlib
+
+
+# from IPython import display
+
 
 
 """## Training
@@ -103,7 +105,10 @@ def load(image_file):
 
 
 def load_npy(npy_file):
+  print('aaaaaaaaa')
+  print(npy_file)
   image = np.load(npy_file)
+  print('bbbbbbb')
   w = image.shape[1]
   w = w // 2
   input_image = image[:, w:, :]
@@ -132,7 +137,7 @@ def resize(input_image, real_image, height, width):
   return input_image, real_image
 
 
-def random_crop(input_image, real_image):
+def random_crop(input_image, real_image, IMG_HEIGHT, IMG_WIDTH):
   stacked_image = tf.stack([input_image, real_image], axis=0)
   cropped_image = tf.image.random_crop(
       stacked_image, size=[2, IMG_HEIGHT, IMG_WIDTH, 3])
@@ -148,12 +153,12 @@ def normalize(input_image, real_image):
   return input_image, real_image
 
 @tf.function()
-def random_jitter(input_image, real_image):
+def random_jitter(input_image, real_image, IMG_HEIGHT, IMG_WIDTH):
   # Resizing to 286x286
   input_image, real_image = resize(input_image, real_image, 286, 286)
 
   # Random cropping back to 256x256
-  input_image, real_image = random_crop(input_image, real_image)
+  input_image, real_image = random_crop(input_image, real_image, IMG_HEIGHT, IMG_WIDTH)
 
   if tf.random.uniform(()) > 0.5:
     # Random mirroring

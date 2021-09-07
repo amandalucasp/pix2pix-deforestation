@@ -1,12 +1,11 @@
+from matplotlib import pyplot as plt
 import tensorflow as tf
-import os
+import numpy as np
+import datetime
 import pathlib
 import time
-import datetime
-from matplotlib import pyplot as plt
-from IPython im
-import numpy as np
-import pathlib
+import os
+
 from generator import *
 from discriminator import *
 from helpers import *
@@ -22,10 +21,11 @@ IMG_HEIGHT = 256
 # Number of output channels for the Generator
 OUTPUT_CHANNELS = 3
 # Paths
-PATH = './data'
-OUTPUT_PATH './output'
-log_dir="logs/"
-checkpoint_dir = '/training_checkpoints'
+PATH = '/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples/'
+OUTPUT_PATH = './output/'
+log_dir="./logs/"
+checkpoint_dir = './training_checkpoints/'
+os.makedirs(OUTPUT_PATH, exist_ok=True) # todo adicionar timestamp aqui
 os.makedirs(checkpoint_dir, exist_ok=True)
 # Lambda term from the Loss Function
 LAMBDA = 100
@@ -33,31 +33,35 @@ LAMBDA = 100
 # sample_image_from_np = np.load(str(PATH / '0.npy'))
 # print(sample_image_from_np.shape, sample_image_from_np.dtype)
 
-inp, re = load_npy_as_image(str(path_npy / '0.npy'))
+inp, re = load_npy(PATH + 'training_data/pairs/0.npy')
 print(inp.shape, inp.dtype, re.shape, re.dtype)
 
 fig = plt.figure(figsize=(6, 6))
 for i in range(4):
-  rj_inp, rj_re = random_jitter(inp, re)
+  rj_inp, rj_re = random_jitter(inp, re, IMG_HEIGHT, IMG_WIDTH)
   plt.subplot(2, 2, i + 1)
   plt.imshow(rj_inp / 255.0)
   plt.axis('off')
-fig.savefig(OUTPUT_PATH/'preprocessad_sample_input.png')
-
+fig.savefig(OUTPUT_PATH + 'preprocessad_sample_input.png')
 
 """## Build an input pipeline with `tf.data`"""
 
-train_dataset = tf.data.Dataset.list_files(str(PATH / 'train/*.npy'))
-train_dataset = train_dataset.map(load_npy_train, num_parallel_calls=tf.data.AUTOTUNE)
+train_dataset = tf.data.Dataset.list_files(str(PATH + 'training_data/pairs/*.npy'))
+print(train_dataset)
+train_dataset = train_dataset.map(load_npy_train, num_parallel_calls=tf.data.experimental.AUTOTUNE) #tf.data.AUTOTUNE)
+print('BBBBB')
 train_dataset = train_dataset.shuffle(BUFFER_SIZE)
 train_dataset = train_dataset.batch(BATCH_SIZE)
 
+exit()
+
 try:
-  test_dataset = tf.data.Dataset.list_files(str(PATH / 'test/*.npy'))
+  test_dataset = tf.data.Dataset.list_files(PATH + 'testing_data/pairs/*.npy')
 except tf.errors.InvalidArgumentError:
-  test_dataset = tf.data.Dataset.list_files(str(PATH / 'val/*.npy'))
+  test_dataset = tf.data.Dataset.list_files(PATH + 'validation_data/pairs/*.npy')
 test_dataset = test_dataset.map(load_npy_test)
 test_dataset = test_dataset.batch(BATCH_SIZE)
+
 
 
 """Visualize the generator model architecture:"""
