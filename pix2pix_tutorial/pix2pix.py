@@ -72,6 +72,7 @@ from matplotlib import pyplot as plt
 # from IPython import display
 
 import numpy as np
+import glob
 
 print(tf.executing_eagerly())
 
@@ -100,12 +101,12 @@ list(PATH.parent.iterdir())
 
 """Each original image is of size `256 x 512` containing two `256 x 256` images:"""
 
-sample_image = tf.io.read_file(str(PATH / 'train/1.jpg'))
-sample_image = tf.io.decode_jpeg(sample_image)
-print(sample_image.shape)
+# sample_image = tf.io.read_file(str(PATH / 'train/1.jpg'))
+# sample_image = tf.io.decode_jpeg(sample_image)
+# print(sample_image.shape)
 
-plt.figure()
-plt.imshow(sample_image)
+# plt.figure()
+# plt.imshow(sample_image)
 
 """You need to separate real building facade images from the architecture label images—all of which will be of size `256 x 256`.
 
@@ -141,8 +142,8 @@ def load_npy(npy_file):
   real_image = image[:, :w, :]
   input_image = tf.cast(input_image, tf.float32)
   real_image = tf.cast(real_image, tf.float32)
-  input_image = tf.ensure_shape(input_image, [256, 256, 3])
-  real_image = tf.ensure_shape(real_image, [256, 256, 3])
+  # input_image = tf.ensure_shape(input_image, [256, 256, 3])
+  # real_image = tf.ensure_shape(real_image, [256, 256, 3])
   return input_image, real_image
 
 def read_npy_file(item):
@@ -151,7 +152,7 @@ def read_npy_file(item):
 
 """Plot a sample of the input (architecture label image) and real (building facade photo) images:"""
 
-# inp, re = load(str(PATH / 'train/100.jpg'))
+inp, re = load(str(PATH / 'train/100.jpg'))
 # Casting to int for matplotlib to display the images
 # plt.figure()
 # plt.imshow(inp / 255.0)
@@ -242,11 +243,6 @@ def load_image_test(image_file):
   input_image, real_image = normalize(input_image, real_image)
   return input_image, real_image
 
-def set_shapes(input_image, real_image):
-  input_image.set_shape((256, 256, 3))
-  real_image.set_shape((256, 256, 3))
-  return input_image, real_image
-
 def load_npy_train(image_file):
   input_image, real_image = load_npy(image_file)
   input_image, real_image = random_jitter(input_image, real_image)
@@ -261,45 +257,42 @@ def load_npy_test(image_file):
 
 """## Build an input pipeline with `tf.data`"""
 
+print('[*] Train Dataset')
 train_dataset = tf.data.Dataset.list_files(str(PATH / 'train/*.jpg'))
 # tf.Tensor(b'datasets/facades/train/305.jpg', shape=(), dtype=string)
 train_dataset = train_dataset.map(load_image_train, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 train_dataset = train_dataset.shuffle(BUFFER_SIZE)
 train_dataset = train_dataset.batch(BATCH_SIZE)
+print(train_dataset.element_spec)
 print(train_dataset)
 
-# train_dataset = tf.data.Dataset.list_files(str(npy_path / 'training_data/pairs/*.npy'))
-# # tf.Tensor(b'/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples/training_data/pairs/845.npy', shape=(), dtype=string)
-# train_dataset = train_dataset.map(load_npy_train, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-# train_dataset = train_dataset.shuffle(BUFFER_SIZE)
-# train_dataset = train_dataset.batch(BATCH_SIZE)
-# exit()
-# npy_path
-# train_dataset = tf.data.Dataset.list_files(str(npy_path / 'training_data/pairs/*.npy'))
-# print(train_dataset)
-# train_dataset = train_dataset.map(load_npy_train, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-# train_dataset = train_dataset.shuffle(BUFFER_SIZE)
-# train_dataset = train_dataset.batch(BATCH_SIZE)
-# print('train_dataset')
-# 
+def set_shapes(img, label, img_shape):
+    img.set_shape(img_shape)
+    label.set_shape(img_shape)
+    return img, label
 
-# def set_shapes(img, img_shape):
-#     img.set_shape(img_shape)
-#     return img
-
-import glob
 num_channels = 3
-list_npy_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
-train_dataset2 = tf.data.Dataset.from_tensor_slices(list_npy_files) # todo passar lista dos arrays
+img_shape = [256, 256, 3]
+# list_npy_files = tf.data.Dataset.list_files(str(npy_path / 'training_data/pairs/*.npy'))
+train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
+train_ds = tf.data.Dataset.from_tensor_slices(train_files)
 # https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/numpy_function
-train_dataset2 = train_dataset2.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_train, [item], [tf.float32,tf.float32])))
-for item in train_dataset2:
-  print(item) # -> aqui cada item esta com shape
-  break
-# train_dataset2 = train_dataset2.map(lambda item: tuple(tf.compat.v1.numpy_function(set_shapes, [item], [tf.float32,tf.float32])))
-print(train_dataset2)
-exit()
+train_ds = train_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_train, [item], [tf.float32,tf.float32])))
+train_ds = train_ds.map(lambda img, label: set_shapes(img, label, img_shape))
+train_ds = train_ds.shuffle(BUFFER_SIZE)
+train_ds = train_ds.batch(BATCH_SIZE)
+print(train_ds.element_spec)
+print(train_ds)
 
+print('[*] Test Dataset')
+test_files = glob.glob(str(npy_path / 'testing_data/pairs/*.npy'))
+# test_ds = tf.data.Dataset.list_files(str(PATH / 'validation_data/pairs/*.npy'))
+test_ds = tf.data.Dataset.from_tensor_slices(test_files)
+test_ds = test_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
+test_ds = test_ds.map(lambda img, label: set_shapes(img, label, img_shape))
+test_ds = test_ds.batch(BATCH_SIZE)
+print(test_ds.element_spec)
+print(test_ds)
 
 try:
   test_dataset = tf.data.Dataset.list_files(str(PATH / 'test/*.jpg'))
