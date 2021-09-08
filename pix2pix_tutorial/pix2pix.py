@@ -331,6 +331,7 @@ def downsample(filters, size, apply_batchnorm=True):
 
 down_model = downsample(3, 4)
 down_result = down_model(tf.expand_dims(inp, 0))
+print ('down_result.shape:')
 print (down_result.shape)
 
 """Define the upsampler (decoder):"""
@@ -356,6 +357,7 @@ def upsample(filters, size, apply_dropout=False):
 
 up_model = upsample(3, 4)
 up_result = up_model(down_result)
+print ('up_result.shape')
 print (up_result.shape)
 
 """Define the generator with the downsampler and the upsampler:"""
@@ -418,7 +420,9 @@ generator = Generator()
 """Test the generator:"""
 
 gen_output = generator(inp[tf.newaxis, ...], training=False)
+fig = plt.figure()
 plt.imshow(gen_output[0, ...])
+fig.savefig('./gen_output.png')
 
 """### Define the generator loss
 
@@ -499,8 +503,10 @@ discriminator = Discriminator()
 """Test the discriminator:"""
 
 disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
+fig = plt.figure()
 plt.imshow(disc_out[0, ..., -1], vmin=-20, vmax=20, cmap='RdBu_r')
 plt.colorbar()
+fig.savefig('./disc_out.png')
 
 """### Define the discriminator loss
 
