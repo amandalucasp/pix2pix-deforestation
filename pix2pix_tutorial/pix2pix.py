@@ -73,6 +73,8 @@ from matplotlib import pyplot as plt
 
 import numpy as np
 
+print(tf.executing_eagerly())
+
 """## Load the dataset
 
 Download the CMP Facade Database data (30MB). Additional datasets are available in the same format [here](http://efrosgans.eecs.berkeley.edu/pix2pix/datasets/). In Colab you can select other datasets from the drop-down menu. Note that some of the other datasets are significantly larger (`edges2handbags` is 8GB). 
@@ -132,7 +134,6 @@ def load(image_file):
 
 
 def load_npy(npy_file):
-  print(npy_file)
   image = np.load(npy_file)
   w = image.shape[1]
   w = w // 2
@@ -140,6 +141,8 @@ def load_npy(npy_file):
   real_image = image[:, :w, :]
   input_image = tf.cast(input_image, tf.float32)
   real_image = tf.cast(real_image, tf.float32)
+  input_image = tf.ensure_shape(input_image, [256, 256, 3])
+  real_image = tf.ensure_shape(real_image, [256, 256, 3])
   return input_image, real_image
 
 def read_npy_file(item):
@@ -239,17 +242,20 @@ def load_image_test(image_file):
   input_image, real_image = normalize(input_image, real_image)
   return input_image, real_image
 
+def set_shapes(input_image, real_image):
+  input_image.set_shape((256, 256, 3))
+  real_image.set_shape((256, 256, 3))
+  return input_image, real_image
+
 def load_npy_train(image_file):
   input_image, real_image = load_npy(image_file)
   input_image, real_image = random_jitter(input_image, real_image)
   input_image, real_image = normalize(input_image, real_image)
-  print('load_npy_train:', input_image.shape, real_image.shape)
   return input_image, real_image
 
 def load_npy_test(image_file):
   input_image, real_image = load_npy(image_file)
-  input_image, real_image = resize(input_image, real_image,
-                                   IMG_HEIGHT, IMG_WIDTH)
+  input_image, real_image = resize(input_image, real_image, IMG_HEIGHT, IMG_WIDTH)
   input_image, real_image = normalize(input_image, real_image)
   return input_image, real_image
 
@@ -267,7 +273,7 @@ print(train_dataset)
 # train_dataset = train_dataset.map(load_npy_train, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 # train_dataset = train_dataset.shuffle(BUFFER_SIZE)
 # train_dataset = train_dataset.batch(BATCH_SIZE)
-
+# exit()
 # npy_path
 # train_dataset = tf.data.Dataset.list_files(str(npy_path / 'training_data/pairs/*.npy'))
 # print(train_dataset)
@@ -285,13 +291,15 @@ import glob
 num_channels = 3
 list_npy_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
 train_dataset2 = tf.data.Dataset.from_tensor_slices(list_npy_files) # todo passar lista dos arrays
-train_dataset2 = train_dataset2.map(lambda item: tuple(tf.numpy_function(load_npy_train, [item], [tf.float32,tf.float32])))
+# https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/numpy_function
+train_dataset2 = train_dataset2.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_train, [item], [tf.float32,tf.float32])))
 for item in train_dataset2:
-  print(item)
-# train_dataset2 = train_dataset2.map(lambda item: set_shapes(item,(256,256,num_channels)))
-print('train_dataset2')
+  print(item) # -> aqui cada item esta com shape
+  break
+# train_dataset2 = train_dataset2.map(lambda item: tuple(tf.compat.v1.numpy_function(set_shapes, [item], [tf.float32,tf.float32])))
 print(train_dataset2)
 exit()
+
 
 try:
   test_dataset = tf.data.Dataset.list_files(str(PATH / 'test/*.jpg'))
