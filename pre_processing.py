@@ -2,7 +2,7 @@ import yaml
 import gdal
 import skimage
 import cv2
-import scipy.misc
+import imageio
 import numpy as np
 from PIL import Image
 import sys, os, platform
@@ -24,11 +24,11 @@ image_stack, final_mask = get_dataset(config)
 image_array = normalization(image_stack.copy(), config['type_norm'])
 del image_stack
 
-sample = image_array[:500,:500,:]
+sample = image_array[:500,:500,:3]
 sample_mask = final_mask[:500, :500]
-cv2.imwrite('image_array_cv2.png', sample)
-scipy.misc.imsave('image_array.png', sample)
-scipy.misc.imsave('final_mask.png', sample_mask)
+cv2.imwrite('sample_image_array_cv2.png', sample)
+imageio.imwrite('sample_image_array.png', sample)
+imageio.imwrite('sample_mask.png', sample_mask)
 
 # Print percentage of each class (whole image)
 print('Total no-deforestaion class is {}'.format(len(final_mask[final_mask==0])))

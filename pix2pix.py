@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import tensorflow as tf
 import numpy as np
 import pathlib
+import imageio
 import glob
 import yaml
 import time
@@ -28,7 +29,10 @@ input_shape = [IMG_WIDTH, IMG_HEIGHT, 3]
 # Generator Loss Term
 LAMBDA = config['lambda']
 # Dataset items used for training
-BUFFER_SIZE = len(train_files)
+if 'buffer_size' in config:
+  BUFFER_SIZE = config['buffer_size'] 
+else:
+  BUFFER_SIZE = len(train_files)
 
 npy_path = pathlib.Path(config['data_path'])
 inp, re = load_npy(str(npy_path/'training_data/pairs/0.npy'))
@@ -42,7 +46,7 @@ out_dir = output_folder + "/output/"
 train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
 train_ds = tf.data.Dataset.from_tensor_slices(train_files)
 train_ds = train_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_train, [item], [tf.float32,tf.float32])))
-train_ds = train_ds.map(lambda img, label: set_shapes(img, label, img_shape))
+train_ds = train_ds.map(lambda img, label: set_shapes(img, label, input_shape))
 train_ds = train_ds.shuffle(BUFFER_SIZE)
 train_ds = train_ds.batch(BATCH_SIZE)
 print('[*] Train Dataset:')
@@ -56,7 +60,7 @@ except tf.errors.InvalidArgumentError:
 
 test_ds = tf.data.Dataset.from_tensor_slices(test_files)
 test_ds = test_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
-test_ds = test_ds.map(lambda img, label: set_shapes(img, label, img_shape))
+test_ds = test_ds.map(lambda img, label: set_shapes(img, label, input_shape))
 test_ds = test_ds.batch(BATCH_SIZE)
 
 print('[*] Test Dataset:')
@@ -250,8 +254,10 @@ def fit(train_ds, test_ds, steps):
 
 fit(train_ds, test_ds, steps=config['training_steps'])
 
-os.makedirs(output_folder + '/generated_images/')
+os.makedirs(output_folder + '/generated_plots/')
+os.makedirs(config['data_path'] + '/synthetic_data_' + time_string + '/')
 counter = 0
-for inp, tar in test_ds: #.take():
-  generate_images(generator, inp, tar, output_folder + '/generated_images/' + str(counter) + '.png')
+for inp, tar in test_ds:
+  prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots/' + str(counter) + '.png')
+  imageio.imwrite(config['data_path'] + '/synthetic_data_' + time_string + '/' + str(counter) + '.png', prediction)
   counter+=1

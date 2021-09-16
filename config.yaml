@@ -1,18 +1,20 @@
 # training parameters
 dataset_name: 'binary-problem'
-data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples-binary'
-training_steps: 5000
+data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples'
+training_steps: 3000
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
 lambda: 100
-img_width: 256
-img_height: 256
+image_width: 256
+image_height: 256
 output_channels: 3
+buffer_size: 100
 
 # pre-processing
 debug_mode: True
 # usa a mascara como mascara binaria com 2 classes (desmatamento e nao desmatamento)
 # e considera apenas a imagem T2
-two_classes_problem: True
+# 0: forest, 1: new deforestation, 2: old deforestation
+two_classes_problem: False
 # tiles usados para treinamento e validacao
 tiles_tr: [1,3,5,7,8,10,11,13,14,16,18,20,4,6,19]
 tiles_val: [2, 9, 12]

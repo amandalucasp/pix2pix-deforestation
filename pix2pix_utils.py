@@ -140,3 +140,4 @@ def generate_images(model, test_input, tar, filename):
     plt.axis('off')
   fig.savefig(filename)
   plt.close(fig)
+  return prediction[0]

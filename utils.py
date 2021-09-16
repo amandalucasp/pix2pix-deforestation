@@ -15,21 +15,56 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config):
     os.makedirs(pairs_path + '/pairs', exist_ok=True)
     counter = 0
     h, w, c = patches_list[0].shape
-    for i in range(patches_list.shape[0]):
-        combined = np.zeros(shape=(h,w*2,c))
-        combined[:,:w,:] = patches_list[i]
-        converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-        if config['type_norm'] == 0: # image is [0,255]
-            converted = 255*converted
-        combined[:,w:,:] = converted
-        np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
-        if config['debug_mode'] and config['two_classes_problem']:
-            cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
-            # scipy.misc.imsave()
-        counter += 1
+    # print(' h, w, c ')
+    # print( h, w, c )
+
+    if config['two_classes_problem']:
+        for i in range(patches_list.shape[0]):
+            combined = np.zeros(shape=(h,w*2,c))
+            combined[:,:w,:] = patches_list[i]
+            converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
+            if config['type_norm'] == 0: # image is [0,255]
+                converted = 255*converted
+            combined[:,w:,:] = converted
+            np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
+            if config['debug_mode']:
+                cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
+            counter += 1
+    else:
+        for i in range(patches_list.shape[0]):
+            # patches_list: first half of c channels is T1, second half is T2
+            # combined will be: T1 - T2 - mask
+            combined = np.zeros(shape=(h,w*3,c//2))
+            # print('combined.shape:', combined.shape)
+            # print('patches_list[i].shape:', patches_list[i].shape)
+            combined[:,:w,:] = patches_list[i][:,:,:c//2]
+            combined[:,w:w*2,:] = patches_list[i][:,:,c//2:]
+            converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
+            # print('converted.unique():', np.unique(converted))
+            # if config['type_norm'] == 0: # image is [0,255]
+            #     converted = 255*converted
+            # 0: forest, 1: new deforestation, 2: old deforestation
+            if config['type_norm'] == 0:
+                converted[converted == 1] = 255/2
+                converted[converted == 2] = 255
+            # print('converted.unique():', np.unique(converted))
+            combined[:,w*2:,:] = converted
+            np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
+            if config['debug_mode']:
+                cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
+            counter += 1
 
 
 def get_dataset(config):
+    """
+    input: config - a dict file with processing parameters
+    output: image_stack, final_mask
+        - two_classes_problem = True:
+            image_stack: only T2; final_mask: binary mask; 
+        - two_classes_problem = False:
+            image_stack: T1 + T2 (concat); final_mask: 3-classes mask;  
+    """
+
     print('[*]Loading dataset')
     if not config['two_classes_problem']:
         # LOAD IMAGE T1
@@ -58,7 +93,6 @@ def get_dataset(config):
     sent2_2019 = filter_outliers(sent2_2019.copy())
 
     if config['two_classes_problem']:
-        # print('Deforestation/Forest Segmentation.')
         image_stack = sent2_2019
         del sent2_2019
     else:
@@ -163,6 +197,7 @@ def write_patches_to_disk(patches, patches_ref, out_path):
         np.save(out_path + '/masks/' + str(i) + '.npy', patches_ref[i])
         counter += 1
 
+
 def save_minipatches(patches_list, patches_ref_list, out_path, config):
     mini_stride = int(config['minipatch_size']/4)
     os.makedirs(out_path + '/texture_class_0', exist_ok=True)
@@ -177,6 +212,7 @@ def save_minipatches(patches_list, patches_ref_list, out_path, config):
             np.save(out_path + '/texture_class_1/' + str(idx) + '.npy', patches[1])
             counter_ +=1
         counter+=1
+
 
 def extract_minipatches_from_patch(input_image, reference, minipatch_size, mini_stride, index, out_path):
     window_shape = minipatch_size
@@ -195,7 +231,7 @@ def extract_minipatches_from_patch(input_image, reference, minipatch_size, mini_
     return patches, patches_ref, found_patch
 
 
-def discard_patches_by_percentage(patches, patches_ref, config):
+def discard_patches_by_percentage(patches, patches_ref, config, new_deforestation_pixel_value = 1):
     patch_size = config['patch_size']
     percentage = config['min_percentage']
     patches_ = []
@@ -203,7 +239,7 @@ def discard_patches_by_percentage(patches, patches_ref, config):
     for i in range(len(patches)):
         patch = patches[i]
         patch_ref = patches_ref[i]
-        class1 = patch_ref[patch_ref == 1]
+        class1 = patch_ref[patch_ref == new_deforestation_pixel_value]
         per = int((patch_size ** 2) * (percentage / 100))
         # print(len(class1), per)
         if len(class1) >= per:
