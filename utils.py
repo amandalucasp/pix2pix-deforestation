@@ -1,7 +1,7 @@
 import gdal
 import skimage
+import imageio
 import cv2
-import scipy.misc
 import numpy as np
 from PIL import Image
 import sys, os, platform
@@ -149,7 +149,7 @@ def get_only_texture_minipatches(all_patches_array, all_patches_ref, index, out_
             aux_vis_1 = normalization(aux_vis_1, 2)
             # aux_vis_2 = normalization(aux_vis_2[:, :, 3:], 2)
             # print(aux_vis_1.shape, aux_vis_2.shape)
-            scipy.misc.imsave(out_path + '/texture_class_' + str(patch_class) + '_debug/' + str(index) + '_1.jpg', aux_vis_1)
+            imageio.imwrite(out_path + '/texture_class_' + str(patch_class) + '_debug/' + str(index) + '_1.jpg', aux_vis_1)
             # scipy.misc.imsave(out_path + '/texture_class_' + str(patch_class) + '_debug/' + str(index) + '_2.jpg', aux_vis_2)
             if found_patch == list([1, 1]):
                 return patches, patches_ref, found_patch
