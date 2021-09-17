@@ -4,6 +4,7 @@ import tensorflow as tf
 import numpy as np
 import pathlib
 import imageio
+import shutil
 import glob
 import yaml
 import time
@@ -17,8 +18,9 @@ stream = open('./config.yaml')
 config = yaml.load(stream)
 
 time_string = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
-output_folder = config['dataset_name'] + '/' + time_string
+output_folder = config['training_name'] + '/' + time_string
 os.makedirs(output_folder)
+shutil.copy('./config.yaml', output_folder)
 
 BATCH_SIZE = config['batch_size']
 # Each image is 256x256 in size
@@ -222,9 +224,11 @@ def train_step(input_image, target, step):
     tf.summary.scalar('disc_loss', disc_loss, step=step//1000)
 
 
-def fit(train_ds, test_ds, steps):
+def fit(train_ds, test_ds, config):
   example_input, example_target = next(iter(test_ds.take(1)))
   start = time.time()
+
+  steps = config['training_steps']
 
   counter = 0
   for step, (input_image, target) in train_ds.repeat().take(steps).enumerate():
@@ -248,11 +252,11 @@ def fit(train_ds, test_ds, steps):
 
 
     # Save (checkpoint) the model every 5k steps
-    if (step + 1) % 10000 == 0:
+    if (step + 1) % config['checkpoint_steps'] == 0:
       checkpoint.save(file_prefix=checkpoint_prefix)
 
 
-fit(train_ds, test_ds, steps=config['training_steps'])
+fit(train_ds, test_ds, config)
 
 os.makedirs(output_folder + '/generated_plots/')
 os.makedirs(config['data_path'] + '/synthetic_data_' + time_string + '/')

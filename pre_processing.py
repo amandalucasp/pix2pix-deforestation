@@ -15,10 +15,14 @@ from utils import *
 
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
-print(config)
+
 stride = int(config['patch_size'] / 2)
 tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
 
+config['output_path'] = config['output_path'] + '_change_detection_' + str(config['change_detection']) +  '_two_classes_' + str(config['two_classes_problem'])
+# print(config['output_path'])
+
+print(config)
 os.makedirs(config['output_path'], exist_ok=True)
 shutil.copy('./config.yaml', config['output_path'])
 
