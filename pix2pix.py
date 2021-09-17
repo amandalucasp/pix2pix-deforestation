@@ -43,7 +43,7 @@ print(inp.shape, re.shape)
 
 checkpoint_dir = output_folder + '/training_checkpoints'
 log_dir= output_folder + "/logs/"
-out_dir = output_folder + "/output/"
+out_dir = output_folder + "/output_images/"
  
 train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
 train_ds = tf.data.Dataset.from_tensor_slices(train_files)
@@ -234,13 +234,10 @@ def fit(train_ds, test_ds, config):
   for step, (input_image, target) in train_ds.repeat().take(steps).enumerate():
     if (step) % 1000 == 0:
       # display.clear_output(wait=True)
-
       if step != 0:
         print(f'Time taken for 1000 steps: {time.time()-start:.2f} sec\n')
-
       start = time.time()
-
-      generate_images(generator, example_input, example_target, out_dir + str(counter) + '.png')
+      generate_images(generator, example_input, example_target, out_dir + 'step_' + str(counter) + '.png')
       counter +=1000
       print(f"Step: {step//1000}k")
 

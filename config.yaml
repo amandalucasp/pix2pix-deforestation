@@ -41,7 +41,8 @@ minipatch_size: 32
 # training parameters
 training_name: 'change_detection_false_two_classes_false'
 data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples_change_detection_false_two_classes_false'
-training_steps: 10000
+training_steps: 250000
+checkpoint_steps: 25000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
 lambda: 100
 image_width: 256
