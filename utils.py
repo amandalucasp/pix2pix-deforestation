@@ -15,40 +15,38 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config):
     os.makedirs(pairs_path + '/pairs', exist_ok=True)
     counter = 0
     h, w, c = patches_list[0].shape
-    # print(' h, w, c ')
-    # print( h, w, c )
 
-    if config['two_classes_problem']:
+    if config['change_detection']:
+        # T1 + T2 + 3-classes mask
         for i in range(patches_list.shape[0]):
-            combined = np.zeros(shape=(h,w*2,c))
-            combined[:,:w,:] = patches_list[i]
+            # combined will be: T1 - T2 - mask
+            combined = np.zeros(shape=(h,w*3,c//2))
+            combined[:,:w,:] = patches_list[i][:,:,:c//2]
+            combined[:,w:w*2,:] = patches_list[i][:,:,c//2:]
             converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-            if config['type_norm'] == 0: # image is [0,255]
-                converted = 255*converted
-            combined[:,w:,:] = converted
+            if config['type_norm'] == 0:
+                converted[converted == 1] = 255/2
+                converted[converted == 2] = 255
+            combined[:,w*2:,:] = converted
             np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
             if config['debug_mode']:
                 cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
             counter += 1
     else:
+        # T2 only
         for i in range(patches_list.shape[0]):
-            # patches_list: first half of c channels is T1, second half is T2
-            # combined will be: T1 - T2 - mask
-            combined = np.zeros(shape=(h,w*3,c//2))
-            # print('combined.shape:', combined.shape)
-            # print('patches_list[i].shape:', patches_list[i].shape)
-            combined[:,:w,:] = patches_list[i][:,:,:c//2]
-            combined[:,w:w*2,:] = patches_list[i][:,:,c//2:]
+            combined = np.zeros(shape=(h,w*2,c))
+            combined[:,:w,:] = patches_list[i]
             converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-            # print('converted.unique():', np.unique(converted))
-            # if config['type_norm'] == 0: # image is [0,255]
-            #     converted = 255*converted
-            # 0: forest, 1: new deforestation, 2: old deforestation
-            if config['type_norm'] == 0:
-                converted[converted == 1] = 255/2
-                converted[converted == 2] = 255
-            # print('converted.unique():', np.unique(converted))
-            combined[:,w*2:,:] = converted
+            if config['type_norm'] == 0: # image is [0,255]
+                if config['two_classes_problem']:
+                    # binary mask
+                    converted = 255*converted
+                else:
+                    # 3-classes mask
+                    converted[converted == 1] = 255/2
+                    converted[converted == 2] = 255
+            combined[:,w:,:] = converted
             np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
             if config['debug_mode']:
                 cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
@@ -66,7 +64,7 @@ def get_dataset(config):
     """
 
     print('[*]Loading dataset')
-    if not config['two_classes_problem']:
+    if config['change_detection']:
         # LOAD IMAGE T1
         sent2_2018_1 = load_tif_image(config['root_path'] + '2018_10m_b2348.tif').astype('float32')
         sent2_2018_2 = load_tif_image(config['root_path'] + '2018_20m_b5678a1112.tif').astype('float32')
@@ -82,27 +80,20 @@ def get_dataset(config):
     sent2_2019_2 = resize_image(sent2_2019_2.copy(), sent2_2019_1.shape[0], sent2_2019_1.shape[1])
     sent2_2019 = np.concatenate((sent2_2019_1, sent2_2019_2), axis=-1)
     del sent2_2019_1, sent2_2019_2
-
-    if not config['two_classes_problem']:
-        sent2_2018 = sent2_2018[:, :, config['channels']]       
-    sent2_2019 = sent2_2019[:, :, config['channels']]
     
-    # Filter outliers
-    if not config['two_classes_problem']:
-        sent2_2018 = filter_outliers(sent2_2018.copy())
+    sent2_2019 = sent2_2019[:, :, config['channels']]
     sent2_2019 = filter_outliers(sent2_2019.copy())
+    image_stack = sent2_2019
+    del sent2_2019
 
-    if config['two_classes_problem']:
-        image_stack = sent2_2019
-        del sent2_2019
-    else:
-        image_stack = np.concatenate((sent2_2018, sent2_2019), axis=-1)
-        del sent2_2018, sent2_2019
+    if config['change_detection']:
+        sent2_2018 = sent2_2018[:, :, config['channels']]  
+        sent2_2018 = filter_outliers(sent2_2018.copy()) 
+        image_stack = np.concatenate((sent2_2018, image_stack), axis=-1)
+        del sent2_2018 #, sent2_2019
 
     final_mask = np.load(config['root_path']+'final_mask_label.npy').astype('float32')
     # 0: forest, 1: new deforestation, 2: old deforestation
-
-    # print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
     # change into only forest and deforestation:
     if config['two_classes_problem']:
         final_mask[final_mask == 2] = 1

@@ -2,6 +2,7 @@ import yaml
 import gdal
 import skimage
 import cv2
+import shutil
 import imageio
 import numpy as np
 from PIL import Image
@@ -17,6 +18,9 @@ config = yaml.load(stream, Loader=yaml.CLoader)
 print(config)
 stride = int(config['patch_size'] / 2)
 tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
+
+os.makedirs(config['output_path'], exist_ok=True)
+shutil.copy('./config.yaml', config['output_path'])
 
 image_stack, final_mask = get_dataset(config)
 
@@ -44,7 +48,6 @@ trn_out_path = config['output_path'] + '/training_data'
 val_out_path = config['output_path'] + '/validation_data'
 tst_out_path = config['output_path'] + '/testing_data'
 
-os.makedirs(config['output_path'], exist_ok=True)
 os.makedirs(trn_out_path + '/imgs', exist_ok=True)
 os.makedirs(trn_out_path + '/masks', exist_ok=True)
 os.makedirs(val_out_path + '/imgs', exist_ok=True)
