@@ -18,7 +18,8 @@ stream = open('./config.yaml')
 config = yaml.load(stream)
 
 time_string = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
-output_folder = config['training_name'] + '/' + time_string
+# output_folder = config['training_name'] + '/' + time_string
+output_folder = config['data_path'].replace('samples_','train_') + '/' + time_string
 os.makedirs(output_folder)
 shutil.copy('./config.yaml', output_folder)
 
@@ -30,11 +31,6 @@ OUTPUT_CHANNELS = config['output_channels']
 input_shape = [IMG_WIDTH, IMG_HEIGHT, 3]
 # Generator Loss Term
 LAMBDA = config['lambda']
-# Dataset items used for training
-if 'buffer_size' in config:
-  BUFFER_SIZE = config['buffer_size'] 
-else:
-  BUFFER_SIZE = len(train_files)
 
 npy_path = pathlib.Path(config['data_path'])
 inp, re = load_npy(str(npy_path/'training_data/pairs/0.npy'))
@@ -46,6 +42,13 @@ log_dir= output_folder + "/logs/"
 out_dir = output_folder + "/output_images/"
  
 train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
+
+# Dataset items used for training
+if 'buffer_size' in config:
+  BUFFER_SIZE = config['buffer_size'] 
+else:
+  BUFFER_SIZE = len(train_files)
+
 train_ds = tf.data.Dataset.from_tensor_slices(train_files)
 train_ds = train_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_train, [item], [tf.float32,tf.float32])))
 train_ds = train_ds.map(lambda img, label: set_shapes(img, label, input_shape))
@@ -137,11 +140,11 @@ def generator_loss(disc_generated_output, gen_output, target):
   return total_gen_loss, gan_loss, l1_loss
 
 
-def Discriminator():
+def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3]):
   initializer = tf.random_normal_initializer(0., 0.02)
 
-  inp = tf.keras.layers.Input(shape=[256, 256, 3], name='input_image')
-  tar = tf.keras.layers.Input(shape=[256, 256, 3], name='target_image')
+  inp = tf.keras.layers.Input(shape=input_shape, name='input_image') # T1 + 
+  tar = tf.keras.layers.Input(shape=target_shape, name='target_image') # T2
 
   x = tf.keras.layers.concatenate([inp, tar])  # (batch_size, 256, 256, channels*2)
 
@@ -199,7 +202,7 @@ summary_writer = tf.summary.create_file_writer(
 @tf.function
 def train_step(input_image, target, step):
   with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-    gen_output = generator(input_image, training=True)
+    gen_output = generator(input_image, training=True) 
 
     disc_real_output = discriminator([input_image, target], training=True)
     disc_generated_output = discriminator([input_image, gen_output], training=True)
@@ -227,9 +230,7 @@ def train_step(input_image, target, step):
 def fit(train_ds, test_ds, config):
   example_input, example_target = next(iter(test_ds.take(1)))
   start = time.time()
-
   steps = config['training_steps']
-
   counter = 0
   for step, (input_image, target) in train_ds.repeat().take(steps).enumerate():
     if (step) % 1000 == 0:
@@ -237,8 +238,27 @@ def fit(train_ds, test_ds, config):
       if step != 0:
         print(f'Time taken for 1000 steps: {time.time()-start:.2f} sec\n')
       start = time.time()
-      generate_images(generator, example_input, example_target, out_dir + 'step_' + str(counter) + '.png')
+      # if (step) % 5000 == 0: 
+      i = 0
+      plot_list = []
+      for inp, tar in test_ds.take(3):
+        prediction = generate_images(generator, inp, tar)
+        plot_list.append(inp[0])
+        plot_list.append(tar[0])
+        plot_list.append(prediction)
+        i+=1
+      fig = plt.figure(figsize=(15, 15))
+      title = ['Input Image', 'Ground Truth', 'Predicted Image']
+      columns = 3
+      rows = 3
+      for i in range(0, columns*rows):
+        fig.add_subplot(rows, columns, i + 1)
+        plt.imshow(plot_list[i]  * 0.5 + 0.5)
+      fig.savefig(out_dir + str(counter) + '.png')
+      plt.title(title)
+      plt.close(fig)
       counter +=1000
+
       print(f"Step: {step//1000}k")
 
     train_step(input_image, target, step)
@@ -247,13 +267,12 @@ def fit(train_ds, test_ds, config):
     if (step+1) % 10 == 0:
       print('.', end='', flush=True)
 
-
-    # Save (checkpoint) the model every 5k steps
     if (step + 1) % config['checkpoint_steps'] == 0:
       checkpoint.save(file_prefix=checkpoint_prefix)
 
-
+start = time.time()
 fit(train_ds, test_ds, config)
+print(f'[*] Time taken for training: {time.time()-start:.2f} sec\n')
 
 os.makedirs(output_folder + '/generated_plots/')
 os.makedirs(config['data_path'] + '/synthetic_data_' + time_string + '/')
