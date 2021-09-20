@@ -28,20 +28,23 @@ BATCH_SIZE = config['batch_size']
 IMG_WIDTH = config['image_width']
 IMG_HEIGHT = config['image_height']
 OUTPUT_CHANNELS = config['output_channels']
-input_shape = [IMG_WIDTH, IMG_HEIGHT, 3]
 # Generator Loss Term
 LAMBDA = config['lambda']
 
 npy_path = pathlib.Path(config['data_path'])
-inp, re = load_npy(str(npy_path/'training_data/pairs/0.npy'))
-print(np.unique(inp))
-print(inp.shape, re.shape)
+# inp, re = load_npy(str(npy_path/'training_data/pairs/0.npy'))
+# print(np.unique(inp))
+# print(inp.shape, re.shape)
 
 checkpoint_dir = output_folder + '/training_checkpoints'
 log_dir= output_folder + "/logs/"
 out_dir = output_folder + "/output_images/"
  
 train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
+
+inp, re = load_npy(train_files[0])
+input_shape = inp.shape
+target_shape = re.shape
 
 # Dataset items used for training
 if 'buffer_size' in config:
@@ -51,7 +54,7 @@ else:
 
 train_ds = tf.data.Dataset.from_tensor_slices(train_files)
 train_ds = train_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_train, [item], [tf.float32,tf.float32])))
-train_ds = train_ds.map(lambda img, label: set_shapes(img, label, input_shape))
+train_ds = train_ds.map(lambda img, label: set_shapes(img, label, input_shape, target_shape))
 train_ds = train_ds.shuffle(BUFFER_SIZE)
 train_ds = train_ds.batch(BATCH_SIZE)
 print('[*] Train Dataset:')
@@ -65,7 +68,7 @@ except tf.errors.InvalidArgumentError:
 
 test_ds = tf.data.Dataset.from_tensor_slices(test_files)
 test_ds = test_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
-test_ds = test_ds.map(lambda img, label: set_shapes(img, label, input_shape))
+test_ds = test_ds.map(lambda img, label: set_shapes(img, label, input_shape, target_shape))
 test_ds = test_ds.batch(BATCH_SIZE)
 
 print('[*] Test Dataset:')
@@ -124,7 +127,7 @@ def Generator(input_shape=[256, 256, 3]):
   return tf.keras.Model(inputs=inputs, outputs=x)
 
 
-generator = Generator()
+generator = Generator(input_shape)
 gen_output = generator(inp[tf.newaxis, ...], training=False)
 fig = plt.figure()
 plt.imshow(gen_output[0, ...])
@@ -168,8 +171,7 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3]):
 
   return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
-discriminator = Discriminator()
-
+discriminator = Discriminator(input_shape, target_shape)
 disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
 fig = plt.figure()
 plt.imshow(disc_out[0, ..., -1], vmin=-20, vmax=20, cmap='RdBu_r')
@@ -228,7 +230,7 @@ def train_step(input_image, target, step):
 
 
 def fit(train_ds, test_ds, config):
-  example_input, example_target = next(iter(test_ds.take(1)))
+  # example_input, example_target = next(iter(test_ds.take(1)))
   start = time.time()
   steps = config['training_steps']
   counter = 0
@@ -280,4 +282,5 @@ counter = 0
 for inp, tar in test_ds:
   prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots/' + str(counter) + '.png')
   imageio.imwrite(config['data_path'] + '/synthetic_data_' + time_string + '/' + str(counter) + '.png', prediction)
+  np.save(config['data_path'] + '/synthetic_data_' + time_string + '/' + str(counter) + '.npy', prediction)
   counter+=1
