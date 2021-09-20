@@ -280,4 +280,5 @@ counter = 0
 for inp, tar in test_ds:
   prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots/' + str(counter) + '.png')
   imageio.imwrite(config['data_path'] + '/synthetic_data_' + time_string + '/' + str(counter) + '.png', prediction)
+  np.save(config['data_path'] + '/synthetic_data_' + time_string + '/' + str(counter) + '.npy', prediction)
   counter+=1
