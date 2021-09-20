@@ -245,13 +245,14 @@ def fit(train_ds, test_ds, config):
       plot_list = []
       for inp, tar in test_ds.take(3):
         prediction = generate_images(generator, inp, tar)
-        plot_list.append(inp[0])
+        plot_list.append(inp[0][:,:,:3])
+        plot_list.append(inp[0][:,:,3:])
         plot_list.append(tar[0])
         plot_list.append(prediction)
         i+=1
       fig = plt.figure(figsize=(15, 15))
-      title = ['Input Image', 'Ground Truth', 'Predicted Image']
-      columns = 3
+      title = ['T1', 'Mask', 'T2', 'Prediction']
+      columns = 4
       rows = 3
       for i in range(0, columns*rows):
         fig.add_subplot(rows, columns, i + 1)
