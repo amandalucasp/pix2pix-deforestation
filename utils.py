@@ -11,27 +11,50 @@ from skimage.util import view_as_windows
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
-def save_image_pairs(patches_list, patches_ref_list, pairs_path, config):
+def process_masks(rej_pairs_ref, config):
+    if config['synthetic_input_mode'] == 0:
+        return rej_pairs_ref
+
+
+def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthetic_input_pairs=False):
     os.makedirs(pairs_path + '/pairs', exist_ok=True)
     counter = 0
     h, w, c = patches_list[0].shape
 
     if config['change_detection']:
-        # T1 + T2 + 3-classes mask
-        for i in range(patches_list.shape[0]):
-            # combined will be: T1 - T2 - mask
-            combined = np.zeros(shape=(h,w*3,c//2))
-            combined[:,:w,:] = patches_list[i][:,:,:c//2]
-            combined[:,w:w*2,:] = patches_list[i][:,:,c//2:]
-            converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-            if config['type_norm'] == 0:
-                converted[converted == 1] = 255/2
-                converted[converted == 2] = 255
-            combined[:,w*2:,:] = converted
-            np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
-            if config['debug_mode']:
-                cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
-            counter += 1
+        if not synthetic_input_pairs:
+            # T1 + T2 + 3-classes mask
+            for i in range(patches_list.shape[0]):
+                # combined will be: T1 - T2 - mask
+                combined = np.zeros(shape=(h,w*3,c//2))
+                combined[:,:w,:] = patches_list[i][:,:,:c//2]
+                combined[:,w:w*2,:] = patches_list[i][:,:,c//2:]
+                converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
+                if config['type_norm'] == 0:
+                    # 0: forest, 1: new deforestation, 2: old deforestation
+                    converted[converted == 1] = 255/2
+                    converted[converted == 2] = 255
+                combined[:,w*2:,:] = converted
+                np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
+                if config['debug_mode']:
+                    cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
+                counter += 1
+        else:
+            # T1 + blank + 3-classes mask
+            for i in range(patches_list.shape[0]):
+                # combined will be: T1 - blank - mask
+                combined = np.zeros(shape=(h,w*3,c//2))
+                combined[:,:w,:] = patches_list[i][:,:,:c//2]
+                converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
+                if config['type_norm'] == 0:
+                    # 0: forest, 1: new deforestation, 2: old deforestation
+                    converted[converted == 1] = 255/2
+                    converted[converted == 2] = 255
+                combined[:,w*2:,:] = converted
+                np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
+                if config['debug_mode']:
+                    cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
+                counter += 1
     else:
         # T2 only
         for i in range(patches_list.shape[0]):
@@ -223,10 +246,38 @@ def extract_minipatches_from_patch(input_image, reference, minipatch_size, mini_
 
 
 def discard_patches_by_percentage(patches, patches_ref, config, new_deforestation_pixel_value = 1):
+    # 0: forest, 1: new deforestation, 2: old deforestation
     patch_size = config['patch_size']
     percentage = config['min_percentage']
     patches_ = []
     patches_ref_ = []
+    rejected_patches_ = []
+    rejected_patches_ref = []
+    rejected_pixels_count = []
+    for i in range(len(patches)):
+        patch = patches[i]
+        patch_ref = patches_ref[i]
+        class1 = patch_ref[patch_ref == new_deforestation_pixel_value]
+        per = int((patch_size ** 2) * (percentage / 100))
+        # print(len(class1), per)
+        if len(class1) >= per:
+            patches_.append(i)
+            patches_ref_.append(i)
+        else:
+            rejected_patches_.append(i)
+            rejected_patches_ref.append(i) 
+            rejected_pixels_count.append(len(class1))
+    return patches[patches_], patches_ref[patches_ref_], patches[rejected_patches_], patches_ref[rejected_patches_ref], rejected_pixels_count
+
+
+def discard_patches_by_percentage_deprecated(patches, patches_ref, config, new_deforestation_pixel_value = 1):
+    # 0: forest, 1: new deforestation, 2: old deforestation
+    patch_size = config['patch_size']
+    percentage = config['min_percentage']
+    patches_ = []
+    patches_ref_ = []
+    # rejected_patches_ = []
+    # rejected_patches_ref = []
     for i in range(len(patches)):
         patch = patches[i]
         patch_ref = patches_ref[i]
@@ -236,9 +287,20 @@ def discard_patches_by_percentage(patches, patches_ref, config, new_deforestatio
         if len(class1) >= per:
             patches_.append(patch)
             patches_ref_.append(patch_ref)
+        # else:
+            # rejected_patches_.append(patch)
+            # rejected_patches_ref.append(patch_ref) 
+    # print(type(patches), type(patches_))
+    print('a')
+    rejected_patches_ = np.array(list(set(patches.tolist())-set(patches_)))
+    print('b')
+    rejected_patches_ref = np.array(list(set(patches_ref.tolist())-set(patches_ref_)))
+    print('c')
     patches_ = np.array(patches_)
     patches_ref_ = np.array(patches_ref_)
-    return patches_, patches_ref_
+
+    # rejected_patches_ref = np.array(rejected_patches_ref)
+    return patches_, patches_ref_, rejected_patches_, rejected_patches_ref
 
 
 def retrieve_idx_percentage(reference, patches_idx_set, patch_size, pertentage = 5):
@@ -342,27 +404,26 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, patch_size, stride):
     '''Extraction of image patches and labels '''
     patches_out = []
     label_out = []
+    counter = 0
     for num_tile in tiles:
+        counter+=1
+        # print(num_tile, str(counter))
         rows, cols = np.where(mask_amazon == num_tile)
         x1 = np.min(rows)
         y1 = np.min(cols)
         x2 = np.max(rows)
         y2 = np.max(cols)
-
         tile_img = image_array[x1:x2 + 1, y1:y2 + 1, :]
         tile_ref = image_ref[x1:x2 + 1, y1:y2 + 1]
+        # print(tile_img.shape, tile_ref.shape)
         patches_img, patch_ref = extract_patches(tile_img, tile_ref, patch_size, stride)
-        # print(patches_img.shape)
-        # print(patch_ref.shape)
+        # print(patches_img.shape, patch_ref.shape)
         patches_out.append(patches_img)
         label_out.append(patch_ref)
+        # print(len(patches_out), len(label_out))
 
     patches_out = np.concatenate(patches_out)
     label_out = np.concatenate(label_out)
-    # print(patches_out.shape)
-    # print(label_out.shape)
-
-    # exit()
     return patches_out, label_out
 
 
@@ -416,7 +477,7 @@ def normalization(image, norm_type=1):
 def create_mask(size_rows, size_cols, grid_size=(6, 3)):
     num_tiles_rows = size_rows // grid_size[0]
     num_tiles_cols = size_cols // grid_size[1]
-    print('Tiles size: ', num_tiles_rows, num_tiles_cols)
+    # print('Tiles size: ', num_tiles_rows, num_tiles_cols)
     patch = np.ones((num_tiles_rows, num_tiles_cols))
     mask = np.zeros((num_tiles_rows * grid_size[0], num_tiles_cols * grid_size[1]))
     count = 0
@@ -426,5 +487,5 @@ def create_mask(size_rows, size_cols, grid_size=(6, 3)):
             mask[num_tiles_rows * i:(num_tiles_rows * i + num_tiles_rows),
             num_tiles_cols * j:(num_tiles_cols * j + num_tiles_cols)] = patch * count
     # plt.imshow(mask)
-    print('Mask size: ', mask.shape)
+    # print('Mask size: ', mask.shape)
     return mask

@@ -1,6 +1,7 @@
 import yaml
 import gdal
 import skimage
+import time
 import cv2
 import shutil
 import imageio
@@ -16,11 +17,11 @@ from utils import *
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 
-stride = int(config['patch_size'] / 2)
-tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
+stride = int((1 - config['overlap']) * config['patch_size'])
+tiles_ts = [10, 20] #(list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
 
-config['output_path'] = config['output_path'] + '_change_detection_' + str(config['change_detection']) +  '_two_classes_' + str(config['two_classes_problem'])
-# print(config['output_path'])
+config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
+config['output_path'] = config['output_path'] + 'min_percentage' + str(config['min_percentage'])
 
 print(config)
 os.makedirs(config['output_path'], exist_ok=True)
@@ -32,11 +33,11 @@ image_stack, final_mask = get_dataset(config)
 image_array = normalization(image_stack.copy(), config['type_norm'])
 del image_stack
 
-sample = image_array[:500,:500,:3]
-sample_mask = final_mask[:500, :500]
-cv2.imwrite('sample_image_array_cv2.png', sample)
-imageio.imwrite('sample_image_array.png', sample)
-imageio.imwrite('sample_mask.png', sample_mask)
+# sample = image_array[:500,:500,:3]
+# sample_mask = final_mask[:500, :500]
+# cv2.imwrite('sample_image_array_cv2.png', sample)
+# imageio.imwrite('sample_image_array.png', sample)
+# imageio.imwrite('sample_mask.png', sample_mask)
 
 # Print percentage of each class (whole image)
 print('Total no-deforestaion class is {}'.format(len(final_mask[final_mask==0])))
@@ -51,6 +52,7 @@ print("[*] EXTRACTING PATCHES")
 trn_out_path = config['output_path'] + '/training_data'
 val_out_path = config['output_path'] + '/validation_data'
 tst_out_path = config['output_path'] + '/testing_data'
+rej_out_path = config['output_path'] + '/trained_input'
 
 os.makedirs(trn_out_path + '/imgs', exist_ok=True)
 os.makedirs(trn_out_path + '/masks', exist_ok=True)
@@ -67,10 +69,10 @@ final_mask = final_mask[:mask_tiles.shape[0], :mask_tiles.shape[1]]
 patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
 patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
 patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, config['patch_size'], stride)
-patches_trn, patches_trn_ref = discard_patches_by_percentage(patches_trn, patches_trn_ref, config)
-patches_val, patches_val_ref = discard_patches_by_percentage(patches_val, patches_val_ref, config)
-patches_tst, patches_tst_ref = discard_patches_by_percentage(patches_tst, patches_tst_ref, config)
 del image_array, final_mask
+patches_trn, patches_trn_ref, rej_patches_trn, rej_patches_trn_ref, rej_count_trn = discard_patches_by_percentage(patches_trn, patches_trn_ref, config)
+patches_val, patches_val_ref, rej_patches_val, rej_patches_val_ref, rej_count_val = discard_patches_by_percentage(patches_val, patches_val_ref, config)
+patches_tst, patches_tst_ref, rej_patches_tst, rej_patches_tst_ref, rej_count_tst = discard_patches_by_percentage(patches_tst, patches_tst_ref, config)
 
 print('[*] Training patches:', patches_trn.shape)
 print('[*] Validation patches:', patches_val.shape)
@@ -94,7 +96,19 @@ print('Saving validation pairs...')
 save_image_pairs(patches_val, patches_val_ref, val_out_path, config)
 print('Saving testing pairs...')
 save_image_pairs(patches_tst, patches_tst_ref, tst_out_path, config)
-del patches_tst, patches_tst_ref
+del patches_trn, patches_trn_ref, patches_val, patches_val_ref, patches_tst, patches_tst_ref
+
+################### CREATE INPUT FOR THE TRAINED PI2XPI2 GENERATOR
+
+if config['create_input_pix2pix']:
+    print('[*] CREATING INPUT FOR THE TRAINED MODEL')
+    print('Concatenating pairs...')
+    rej_pairs = np.concatenate((rej_patches_trn, rej_patches_val, rej_patches_tst), axis=0)
+    rej_pairs_ref = np.concatenate((rej_patches_trn_ref, rej_patches_val_ref, rej_patches_tst_ref),axis=0)
+    print('Processing masks...')
+    rej_pairs_ref = process_masks(rej_pairs_ref, config)
+    print('Saving pairs...')
+    save_image_pairs(rej_pairs, rej_pairs_ref, rej_out_path, config, synthetic_input_pairs=True)
 
 ################### EXTRACT MINIPATCHES (FOREST AND DEFORESTATION)
 
