@@ -18,10 +18,10 @@ stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 
 stride = int((1 - config['overlap']) * config['patch_size'])
-tiles_ts = [10, 20] #(list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
+tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
 
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
-config['output_path'] = config['output_path'] + 'min_percentage' + str(config['min_percentage'])
+# config['output_path'] = config['output_path'] + 'min_percentage' + str(config['min_percentage'])
 
 print(config)
 os.makedirs(config['output_path'], exist_ok=True)
