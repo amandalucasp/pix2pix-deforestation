@@ -76,7 +76,6 @@ if config['save_tiles']:
         else:
             cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.jpeg', tile_img)
 
-exit()
 
 ################### EXTRACT PATCHES
 
