@@ -48,6 +48,8 @@ print('Percentage of deforestaion class is {:.2f}'.format((len(final_mask[final_
 
 ################### EXTRACT TILES
 
+print("[*] EXTRACTING TILES")
+
 trn_out_path = config['output_path'] + '/training_data'
 val_out_path = config['output_path'] + '/validation_data'
 tst_out_path = config['output_path'] + '/testing_data'
@@ -58,6 +60,7 @@ image_array = image_array[:mask_tiles.shape[0], :mask_tiles.shape[1],:]
 final_mask = final_mask[:mask_tiles.shape[0], :mask_tiles.shape[1]]
 
 if config['save_tiles']:
+    print("[*] SAVING TEST TILES")
     os.makedirs(tst_out_path + '/tiles_ts', exist_ok=True)
     for num_tile in tiles_ts:
         rows, cols = np.where(mask_tiles == num_tile)
@@ -67,7 +70,7 @@ if config['save_tiles']:
         y2 = np.max(cols)
         tile_img = image_array[x1:x2 + 1, y1:y2 + 1, :]
         tile_ref = final_mask[x1:x2 + 1, y1:y2 + 1]
-        np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.npy', tile_ref)
+        np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.npy', tile_img)
         np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_ref.npy', tile_ref)
         if config['change_detection']:
             h, w, c = tile_img.shape
@@ -76,9 +79,7 @@ if config['save_tiles']:
         else:
             cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.jpeg', tile_img)
 
-
 ################### EXTRACT PATCHES
-
 
 print("[*] EXTRACTING PATCHES")
 

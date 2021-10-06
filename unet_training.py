@@ -1,0 +1,329 @@
+from contextlib import redirect_stdout
+from sklearn.utils import shuffle
+import matplotlib.pyplot as plt
+from osgeo import ogr, gdal
+import matplotlib.colors
+from PIL import Image
+import numpy as np
+import datetime
+import pathlib
+import shutil
+import time
+import yaml
+import os
+
+
+import tensorflow as tf
+# from tensorflow.keras.layers import Conv2D, Dense, MaxPooling2D, Dropout, Activation, Flatten, Input, concatenate, UpSampling2D, BatchNormalization
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, accuracy_score, average_precision_score
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from tensorflow.keras.models import Model, load_model, Sequential
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from tensorflow.keras.optimizers import Adam, SGD, RMSprop
+import tensorflow.keras.backend as K
+from tensorflow.keras.layers import *
+
+
+import skimage
+from skimage.util.shape import view_as_windows
+from skimage.transform import resize
+from skimage.morphology import disk
+from skimage.filters import rank
+import skimage.morphology 
+
+cmap = matplotlib.colors.ListedColormap(['blue', 'olive'])
+
+stream = open('./config.yaml')
+config = yaml.load(stream, Loader=yaml.CLoader)
+
+patch_size = config['patch_size']
+channels = config['input_channels']
+number_class = 2 if config['two_classes_problem'] else 3
+
+stride = int((1 - config['overlap']) * config['patch_size'])
+tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
+
+root_path = config['data_path']
+
+training_dir = '/training_data' #/augmented_dataset' 
+validation_dir = '/validation_data'
+testing_dir = '/testing_data'
+testing_tiles_dir = '/testing_data/tiles_ts/'
+
+batch_size = config['batch_size_unet']
+epochs = config['epochs_unet']
+nb_filters = config['nb_filters']
+number_runs = config['times']
+patience_value = config['patience_value']
+
+ts = time.time()
+st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
+output_folder = config['training_output_path'] + 'output_' + st + '_patchsize_' + str(patch_size) + '_batchsize_' + str(batch_size) + '_epochs_' + str(epochs) + '_patience_' + str(patience_value)
+os.makedirs(output_folder, exist_ok = True)
+shutil.copy('./config.yaml', output_folder)
+
+
+def normalization(image, norm_type = 1):
+    image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
+    if (norm_type == 1):
+        scaler = StandardScaler()
+    if (norm_type == 2):
+        scaler = MinMaxScaler(feature_range=(0,1))
+    if (norm_type == 3):
+        scaler = MinMaxScaler(feature_range=(-1,1))
+    scaler = scaler.fit(image_reshaped)
+    image_normalized = scaler.fit_transform(image_reshaped)
+    image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2])
+    return image_normalized1
+
+
+def build_unet(input_shape, nb_filters, n_classes):
+    input_layer = Input(input_shape)
+ 
+    conv1 = Conv2D(nb_filters[0], (3 , 3) , activation='relu' , padding='same', name = 'conv1')(input_layer) 
+    pool1 = MaxPooling2D((2 , 2))(conv1)
+  
+    conv2 = Conv2D(nb_filters[1], (3 , 3) , activation='relu' , padding='same', name = 'conv2')(pool1)
+    pool2 = MaxPooling2D((2 , 2))(conv2)
+  
+    conv3 = Conv2D(nb_filters[2], (3 , 3) , activation='relu' , padding='same', name = 'conv3')(pool2)
+    pool3 = MaxPooling2D((2 , 2))(conv3)
+  
+    conv4 = Conv2D(nb_filters[2], (3 , 3) , activation='relu' , padding='same', name = 'conv4')(pool3)
+    
+    conv5 = Conv2D(nb_filters[2], (3 , 3) , activation='relu' , padding='same', name = 'conv5')(conv4)
+    
+    conv6 = Conv2D(nb_filters[2], (3 , 3) , activation='relu' , padding='same', name = 'conv6')(conv5)
+     
+    tconv3 = Conv2D(nb_filters[2], (3 , 3), activation = 'relu', padding = 'same', name = 'upsampling3')(UpSampling2D(size = (2,2))(conv6))
+    merged3 = concatenate([conv3, tconv3], name='concatenate3')
+      
+    tconv2 = Conv2D(nb_filters[1], (3 , 3), activation = 'relu', padding = 'same', name = 'upsampling2')(UpSampling2D(size = (2,2))(merged3))
+    merged2 = concatenate([conv2, tconv2], name='concatenate2')
+  
+    tconv1 = Conv2D(nb_filters[0], (3 , 3), activation = 'relu', padding = 'same', name = 'upsampling1')(UpSampling2D(size = (2,2))(merged2))
+    merged1 = concatenate([conv1, tconv1], name='concatenate1')
+        
+    output = Conv2D(n_classes,(1,1), activation = 'softmax')(merged1)
+    
+    return Model(input_layer , output)
+
+
+def weighted_categorical_crossentropy(weights):
+        """
+        A weighted version of keras.objectives.categorical_crossentropy
+        
+        Variables:
+            weights: numpy array of shape (C,) where C is the number of classes
+        
+        Usage:
+            weights = np.array([0.5,2,10]) # Class one at 0.5, class 2 twice the normal weights, class 3 10x.
+            loss = weighted_categorical_crossentropy(weights)
+            model.compile(loss=loss,optimizer='adam')
+        """
+        weights = K.variable(weights)
+        def loss(y_true, y_pred):
+            # scale predictions so that the class probas of each sample sum to 1
+            y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
+            # clip to prevent NaN's and Inf's
+            y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+            loss = y_true * K.log(y_pred) + (1-y_true) * K.log(1-y_pred)
+            loss = loss * weights 
+            loss = - K.mean(loss, -1)
+            return loss
+        return loss
+
+
+def compute_metrics(true_labels, predicted_labels):
+  accuracy = 100*accuracy_score(true_labels, predicted_labels)
+  f1score = 100*f1_score(true_labels, predicted_labels, average=None)
+  recall = 100*recall_score(true_labels, predicted_labels, average=None)
+  precision = 100*precision_score(true_labels, predicted_labels, average=None)
+  return accuracy, f1score, recall, precision
+
+
+def train_model(net, patches_train, patches_tr_lb_h, patches_val, patches_val_lb_h, batch_size, epochs, patience_value):
+  print('Start training.. ')
+
+  waiting_time = 0
+
+  validation_accuracy = []
+  training_accuracy = []
+
+  for epoch in range(epochs):
+    loss_tr = np.zeros((1 , 2))
+    loss_val = np.zeros((1 , 2))
+    # Computing the number of batchs
+    n_batchs_tr = patches_train.shape[0]//batch_size
+    # Random shuffle the data
+    patches_train , patches_tr_lb_h = shuffle(patches_train , patches_tr_lb_h , random_state = 0)
+        
+    # Training the network per batch
+    for  batch in range(n_batchs_tr):
+      x_train_b = patches_train[batch * batch_size : (batch + 1) * batch_size , : , : , :]
+      y_train_h_b = patches_tr_lb_h[batch * batch_size : (batch + 1) * batch_size , :, :, :]
+      loss_tr = loss_tr + net.train_on_batch(x_train_b , y_train_h_b)
+    
+    # Training loss
+    loss_tr = loss_tr/n_batchs_tr
+    print("%d [Training loss: %f , Train acc.: %.2f%%]" %(epoch , loss_tr[0 , 0], 100*loss_tr[0 , 1]))
+    training_accuracy.append(loss_tr[0 , 1])
+
+    # Computing the number of batchs
+    n_batchs_val = patches_val.shape[0]//batch_size
+
+    # Evaluating the model in the validation set
+    for  batch in range(n_batchs_val):
+      x_val_b = patches_val[batch * batch_size : (batch + 1) * batch_size , : , : , :]
+      y_val_h_b = patches_val_lb_h[batch * batch_size : (batch + 1) * batch_size , :, :, :]
+      loss_val = loss_val + net.test_on_batch(x_val_b , y_val_h_b)
+    
+    # validation loss
+    loss_val = loss_val/n_batchs_val
+    print("%d [Validation loss: %f , Validation acc.: %.2f%%]" %(epoch , loss_val[0 , 0], 100*loss_val[0 , 1]))
+    validation_accuracy.append(loss_val[0 , 1])
+
+    if epoch == 0:
+      best_loss_val = loss_val[0 , 0]
+
+    print("=> Best_loss_val [ES Criteria]:", str(best_loss_val), "Patience:", str(waiting_time))
+
+    # early stopping
+    if loss_val[0 , 0] < best_loss_val:
+      # reset waiting time
+      waiting_time = 0
+      # update best_loss_val
+      best_loss_val = loss_val[0 , 0]
+    else:
+      # increment waiting time
+      waiting_time +=1
+    
+    # if patience value is reached
+    if waiting_time == patience_value:
+      # stop training
+      return net, validation_accuracy, training_accuracy
+
+  return net, validation_accuracy, training_accuracy
+
+
+def test_model(model, patch_test):
+  result = model.predict(patch_test)
+  predicted_class = np.argmax(result, axis=-1)
+  return predicted_class
+
+   
+def load_patches(root_path, folder):
+  imgs_dir = root_path + folder + '/imgs/'
+  masks_dir = root_path + folder + '/masks/'
+  img_files = os.listdir(imgs_dir)
+  patches = []
+  patches_ref = []
+  for i in range(len(img_files)):
+    if i%100==0:
+      print('Loaded {} images'.format(i))
+    img_path = imgs_dir + img_files[i]
+    mask_path = masks_dir + img_files[i]
+    img = np.load(img_path)
+    img = normalization(img, norm_type = 3) # normaliza entre -1 e +1
+    patches.append(img)
+    patches_ref.append(np.load(mask_path))
+  return np.array(patches), np.array(patches_ref)
+
+
+def load_tiles(root_path, testing_tiles_dir, tiles_ts):
+  dir_ts = root_path + testing_tiles_dir
+  img_list = []
+  ref_list = []
+  for num_tile in tiles_ts:
+    img = np.load(dir_ts + str(num_tile) + '_img.npy')
+    img = normalization(img, norm_type = 3) # normaliza entre -1 e +1
+    ref = np.load(dir_ts + str(num_tile) + '_ref.npy')
+    print(img.shape, ref.shape)
+    img_list.append(img)
+    ref_list.append(ref)
+  return np.array(img_list), np.array(ref_list)
+
+
+# check normalization, maybe apply some map
+# Training patches
+patches_train, patches_tr_ref = load_patches(root_path, training_dir)
+# Validation patches
+patches_val, patches_val_ref = load_patches(root_path, validation_dir)
+# Test patches
+patches_test, patches_test_ref = load_patches(root_path, testing_dir)
+# Test tiles
+tiles_test, tiles_test_ref = load_tiles(root_path, testing_tiles_dir, tiles_ts)
+
+print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.shape))
+print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))
+print("[*] Patches for Testing:", str(patches_test.shape), str(patches_test_ref.shape))
+print("[*] Tiles for Testing:", str(tiles_test.shape), str(tiles_test_ref.shape))
+
+patches_val_lb_h = tf.keras.utils.to_categorical(patches_val_ref, number_class)
+patches_te_lb_h = tf.keras.utils.to_categorical(patches_test_ref, number_class)
+patches_tr_lb_h = tf.keras.utils.to_categorical(patches_tr_ref, number_class)
+
+os.makedirs(output_folder + '/checkpoints', exist_ok=True)
+
+adam = Adam(lr = 0.0001 , beta_1=0.9)
+# 0: forest, 1: new deforestation, 2: old deforestation
+weights = [0.1, 0.6, 0.0] # desconsidero a classe 2 nesse problema
+print("Weights:", weights)
+loss = weighted_categorical_crossentropy(weights)
+
+cmap = matplotlib.colors.ListedColormap(['blue', 'olive', 'brown'])
+
+for run in range(number_runs):
+  net = build_unet((patch_size, patch_size, channels), nb_filters, number_class)
+  net.summary()
+  net.compile(loss = loss, optimizer=adam , metrics=['accuracy'])
+
+  model, validation_accuracy, training_accuracy = train_model(net, patches_train, patches_tr_lb_h, patches_val, patches_val_lb_h, batch_size, epochs, patience_value)
+  name = 'checkpoints/model_{}_epochs_{}_bsize_{}.h5'.format(run, epochs, batch_size)
+  model.save(output_folder + '/' + name)
+
+  fig = plt.figure(figsize=(8, 8))
+  plt.subplot(2, 1, 1)
+  plt.plot(training_accuracy, label='Training Accuracy')
+  plt.plot(validation_accuracy, label='Validation Accuracy')
+  plt.legend(loc='lower right')
+  plt.ylabel('Accuracy')
+  plt.ylim([min(plt.ylim()),1])
+  fig.savefig(output_folder + '/accuracy_model_' + str(run) + '.png')
+  plt.close(fig)
+
+  # test the model on patches 
+  print(patches_test.shape)
+  predicted_labels = test_model(model, patches_test)
+  metrics = compute_metrics(patches_test_ref.flatten(), predicted_labels.flatten())
+  print("Accuracy:", metrics[0])
+  print("F1 Score:", metrics[1])
+  print("Recall:", metrics[2])
+  print("Precision:", metrics[3])
+
+
+  # predicted_tiles = test_model(model, tiles_test)
+  # test the model on tiles
+  # for i in range(len(tiles_test)):
+  #   print('TILE:', str(i), tiles_test[i].shape)
+  #   predicted_tile = test_model(model, tiles_test[i])
+  #   metrics = compute_metrics(tiles_test_ref[i].flatten(), predicted_tile.flatten())
+  #   # print("Accuracy:", metrics[0])
+  #   # print("F1 Score:", metrics[1])
+  #   # print("Recall:", metrics[2])
+  #   # print("Precision:", metrics[3])
+
+  #   fig = plt.figure(figsize=(15,10))
+  #   ax1 = fig.add_subplot(121)
+  #   plt.title('Prediction')
+  #   im = ax1.imshow(predicted_tile, cmap =cmap)
+  #   ax1.axis('off')
+  #   fig.savefig(output_folder + '/prediction_' + str(i) + '.png')
+  #   plt.close()
+  #   fig = plt.figure(figsize=(15,10))
+  #   ax2 = fig.add_subplot(122)
+  #   plt.title('Reference')
+  #   ax2.imshow(tiles_test_ref[i], cmap =cmap)
+  #   ax2.axis('off')
+  #   fig.savefig(output_folder + '/ref_' + str(i) + '.png')
+  #   plt.close()

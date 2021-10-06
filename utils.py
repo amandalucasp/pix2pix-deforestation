@@ -389,6 +389,8 @@ def unpatch_image(patches, stride, border_size, original_image):
 
 
 def extract_patches(input_image, reference, patch_size, stride):
+    # row_steps, cols_steps = int((1-overlap) * patch_size[0]), int((1-overlap) * patch_size[1])
+    # patches = skimage.util.view_as_windows(im_idx, patch_size, step=(row_steps, cols_steps))
     window_shape = patch_size
     window_shape_array = (window_shape, window_shape, input_image.shape[2])
     window_shape_ref = (window_shape, window_shape)
