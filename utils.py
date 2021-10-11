@@ -103,12 +103,9 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
 
 def dilate_masks(masks_list, config):
     dilated_masks = []
-    i = 0
     for img_mask in masks_list:
-        # print('mask', i)
         dilation = dilate_mask(img_mask, config)
         dilated_masks.append(dilation)
-        i+=1
     return dilated_masks
 
 
