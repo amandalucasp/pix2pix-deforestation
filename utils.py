@@ -11,9 +11,125 @@ from skimage.util import view_as_windows
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
-def process_masks(rej_pairs_ref, config):
+def classify_masks(rej_pairs_ref):
+    no_deforestation = []
+    new_deforest = []
+    old_deforest = []
+    only_deforest = []
+    all_classes = []
+    only_old_deforest = []
+
+    for i in range(len(rej_pairs_ref)):
+        current_mask = rej_pairs_ref[i]
+        unique, counts = np.unique(current_mask[0], return_counts=True)
+        if np.array_equal(unique, [0.]):
+            # print('sem desmatamento')
+            no_deforestation.append(i)
+        elif np.array_equal(unique, [2.]):
+            # print('so desmatamento velho')
+            only_old_deforest.append(i)
+        elif np.array_equal(unique, [0., 1.]):
+            # print('desmatamento novo')
+            new_deforest.append(i)
+        elif np.array_equal(unique, [0., 2.]):
+            # mascara tem so desmatamento antigo 
+            # print('desmatamento velho')
+            old_deforest.append(i)
+        elif np.array_equal(unique, [1., 2.]):
+            # print('so desmatamento, antigo e novo')
+            only_deforest.append(i)
+        else:
+            # print('patch tem as 3 classes')
+            all_classes.append(i)
+
+    print('[*] Total rejected patches:', len(rej_pairs_ref))
+    print('[*] Patches with no deforestation:', len(no_deforestation))
+    print('[*] Patches with only OLD deforestation:', len(only_old_deforest))
+    print('[*] Patches with new deforestation and forest:', len(new_deforest))
+    print('[*] Patches with old deforestation and forest:', len(old_deforest))
+    print('[*] Patches with only new+old deforestation:', len(only_deforest))
+    print('[*] Patches with new, old deforestation and forest:', len(all_classes))
+
+    return no_deforestation, new_deforest, old_deforest, only_deforest, all_classes, only_old_deforest
+
+
+def process_masks(rej_pairs, rej_pairs_ref, config):
+    '''
+    faz o processamento das mascaras que serao passadas como entrada (junto com T1) para o gerador treinado.
+    rej_pairs_ref: mascaras dos pares que foram rejeitados durante o pre-processamento
+    rej_percentage: % de desmatamento novo (classe 1) em cada mascara
+    '''
     if config['synthetic_input_mode'] == 0:
-        return rej_pairs_ref
+        # faz nada, retorna os pares (img+mask) originais
+        return rej_pairs, rej_pairs_ref
+
+    no_deforestation, new_deforest, old_deforest, only_deforest, all_classes, only_old_deforest = classify_masks(rej_pairs_ref)
+
+    if config['synthetic_input_mode'] == 1:
+        # ideia 1 - combinando patches que nao tem desmatamento com patches de desmatamento (mudando passado ---> novo)
+
+        # usar apenas os patches que nao tem nada de desmatamento 
+        # + com mascaras so de desmatamento novo (pode pegar mascara com dois desmatamentos e tirar o antigo)
+        final_imgs = rej_pairs[no_deforestation]
+
+        if len(new_deforest) != 0:
+            # existem patches com desmatamento novo + floresta   
+            final_refs = np.random.choice(new_deforest, size=len(final_imgs))
+        else:
+            # nao existem patches com desmatamento novo + floresta, modifico patches de desmatamento antigo
+            selected_patches = rej_pairs_ref[old_deforest]
+            selected_patches[selected_patches == 2.] = 1 # desmatamento antigo ---> desmatamento novo
+            final_refs = np.random.choice(selected_patches, size=len(final_imgs))
+
+    if config['synthetic_input_mode'] == 2:
+        # ideia 2 pt 1 - adicionando desmatamento novo em mascaras com desmatamento passado
+
+        # Selecionar patches apenas com floresta e desmatamento passado (Só 2 classes, sem desmatamento novo)
+        final_imgs = rej_pairs[old_deforest]
+        selected_patches = rej_pairs_ref[old_deforest]
+        # Na máscara: fazer dilate nas regiões de desmatamento passado para criar uma
+        # camada ao redor de desmatamento novo (e chamar essa região ao redor gerada de desmatamento novo na máscara).
+        final_refs = dilate_masks(selected_patches, config)
+
+    if config['synthetic_input_mode'] == 3: # depois juntar com a de cima, 2
+        # ideia 2 pt 2 - adicionando mais desmatamento novo em mascaras com baixa % desmatamento novo
+        final_imgs = rej_pairs[all_classes]
+        selected_patches = rej_pairs_ref[all_classes]
+        final_refs = dilate_masks(selected_patches, config) # verificar se sao disjuntas etc
+    
+
+    return final_imgs, final_refs
+
+
+def dilate_masks(masks_list, config):
+    dilated_masks = []
+    for img_mask in masks_list:
+        dilation = dilate_mask(img_mask, config)
+        dilated_masks.append(dilation)
+    return dilated_masks
+
+
+def dilate_mask(img_mask, config):
+    kernel = np.ones((5,5), np.uint8)
+    per_class_1 = calculate_percentage_of_class(img_mask)
+    nb_interations = 1
+    while per_class_1 < config['goal_percentage']:
+        dilation = cv2.dilate(img_mask, kernel, iterations = nb_interations) # borderValue deixou o processo mais lento
+        diff = dilation - img_mask 
+        dilation[diff == 2.] = 1.
+        per_class_1 = calculate_percentage_of_class(dilation)
+        nb_interations += 1
+    print(nb_interations)
+    return dilation
+
+
+def calculate_percentage_of_class(img_mask):
+    per_class_1 = 0.
+    unique, counts = np.unique(img_mask[0], return_counts=True)
+    if 1 in unique:
+        per_class_1 = counts[1]/len(img_mask)
+        # print(per_class_1, counts[1], len(img_mask))
+    return per_class_1*100
 
 
 def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthetic_input_pairs=False):
@@ -259,7 +375,6 @@ def discard_patches_by_percentage(patches, patches_ref, config, new_deforestatio
         patch_ref = patches_ref[i]
         class1 = patch_ref[patch_ref == new_deforestation_pixel_value]
         per = int((patch_size ** 2) * (percentage / 100))
-        # print(len(class1), per)
         if len(class1) >= per:
             patches_.append(i)
             patches_ref_.append(i)
@@ -268,39 +383,6 @@ def discard_patches_by_percentage(patches, patches_ref, config, new_deforestatio
             rejected_patches_ref.append(i) 
             rejected_pixels_count.append(len(class1))
     return patches[patches_], patches_ref[patches_ref_], patches[rejected_patches_], patches_ref[rejected_patches_ref], rejected_pixels_count
-
-
-def discard_patches_by_percentage_deprecated(patches, patches_ref, config, new_deforestation_pixel_value = 1):
-    # 0: forest, 1: new deforestation, 2: old deforestation
-    patch_size = config['patch_size']
-    percentage = config['min_percentage']
-    patches_ = []
-    patches_ref_ = []
-    # rejected_patches_ = []
-    # rejected_patches_ref = []
-    for i in range(len(patches)):
-        patch = patches[i]
-        patch_ref = patches_ref[i]
-        class1 = patch_ref[patch_ref == new_deforestation_pixel_value]
-        per = int((patch_size ** 2) * (percentage / 100))
-        # print(len(class1), per)
-        if len(class1) >= per:
-            patches_.append(patch)
-            patches_ref_.append(patch_ref)
-        # else:
-            # rejected_patches_.append(patch)
-            # rejected_patches_ref.append(patch_ref) 
-    # print(type(patches), type(patches_))
-    print('a')
-    rejected_patches_ = np.array(list(set(patches.tolist())-set(patches_)))
-    print('b')
-    rejected_patches_ref = np.array(list(set(patches_ref.tolist())-set(patches_ref_)))
-    print('c')
-    patches_ = np.array(patches_)
-    patches_ref_ = np.array(patches_ref_)
-
-    # rejected_patches_ref = np.array(rejected_patches_ref)
-    return patches_, patches_ref_, rejected_patches_, rejected_patches_ref
 
 
 def retrieve_idx_percentage(reference, patches_idx_set, patch_size, pertentage = 5):

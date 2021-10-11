@@ -18,7 +18,7 @@ stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 
 stride = int((1 - config['overlap']) * config['patch_size'])
-tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
+tiles_ts = [7,8] # (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
 
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
 # config['output_path'] = config['output_path'] + 'min_percentage' + str(config['min_percentage'])
@@ -91,6 +91,14 @@ patches_trn, patches_trn_ref, rej_patches_trn, rej_patches_trn_ref, rej_count_tr
 patches_val, patches_val_ref, rej_patches_val, rej_patches_val_ref, rej_count_val = discard_patches_by_percentage(patches_val, patches_val_ref, config)
 patches_tst, patches_tst_ref, rej_patches_tst, rej_patches_tst_ref, rej_count_tst = discard_patches_by_percentage(patches_tst, patches_tst_ref, config)
 
+
+# unique, counts = np.unique(mask[0], return_counts=True)
+
+# print(y)
+
+
+# exit()
+
 print('[*] Training patches:', patches_trn.shape)
 print('[*] Validation patches:', patches_val.shape)
 print('[*] Testing patches:', patches_tst.shape)
@@ -112,27 +120,29 @@ if config['save_patches']:
 
 ################### COMBINE PATCHES INTO INPUT FORMAT FOR PIX2PIX
 
-print("[*] SAVING IMAGE PAIRS")
-print('Saving training pairs...')
-save_image_pairs(patches_trn, patches_trn_ref, trn_out_path, config)
-print('Saving validation pairs...')
-save_image_pairs(patches_val, patches_val_ref, val_out_path, config)
-print('Saving testing pairs...')
-save_image_pairs(patches_tst, patches_tst_ref, tst_out_path, config)
+if config['save_image_pairs']:
+    print("[*] SAVING IMAGE PAIRS")
+    print('Saving training pairs...')
+    save_image_pairs(patches_trn, patches_trn_ref, trn_out_path, config)
+    print('Saving validation pairs...')
+    save_image_pairs(patches_val, patches_val_ref, val_out_path, config)
+    print('Saving testing pairs...')
+    save_image_pairs(patches_tst, patches_tst_ref, tst_out_path, config)
 del patches_trn, patches_trn_ref, patches_val, patches_val_ref, patches_tst, patches_tst_ref
 
 ################### CREATE INPUT FOR THE TRAINED PI2XPI2 GENERATOR
 
 if config['create_input_pix2pix']:
     print('[*] CREATING INPUT FOR THE TRAINED MODEL')
-    rej_out_path = config['output_path'] + '/trained_input'
+    final_out_path = config['output_path'] + '/trained_input'
     print('Concatenating pairs...')
     rej_pairs = np.concatenate((rej_patches_trn, rej_patches_val, rej_patches_tst), axis=0)
     rej_pairs_ref = np.concatenate((rej_patches_trn_ref, rej_patches_val_ref, rej_patches_tst_ref),axis=0)
+    # rej_pixels_count = np.concatenate((rej_count_trn, rej_count_val, rej_count_tst),axis=0)
     print('Processing masks...')
-    rej_pairs_ref = process_masks(rej_pairs_ref, config)
+    final_pairs, final_pairs_ref = process_masks(rej_pairs, rej_pairs_ref, config)
     print('Saving pairs...')
-    save_image_pairs(rej_pairs, rej_pairs_ref, rej_out_path, config, synthetic_input_pairs=True)
+    save_image_pairs(final_pairs, final_pairs_ref, final_out_path, config, synthetic_input_pairs=True)
 
 ################### EXTRACT MINIPATCHES (FOREST AND DEFORESTATION)
 
