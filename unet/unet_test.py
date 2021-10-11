@@ -1,40 +1,35 @@
-import numpy as np
-import tensorflow as tf
+from sklearn.feature_extraction.image import extract_patches_2d
+from contextlib import redirect_stdout
+from sklearn.utils import shuffle
 import matplotlib.pyplot as plt
 from osgeo import ogr, gdal
-from sklearn.utils import shuffle
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import Conv2D, Dense, MaxPooling2D, Dropout, Activation, Flatten, Input, concatenate, UpSampling2D, BatchNormalization
-from tensorflow.keras.models import Model, load_model
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, accuracy_score
-import pathlib
-import os
+import matplotlib.colors
 from PIL import Image
-from sklearn.feature_extraction.image import extract_patches_2d
-import tensorflow.keras.backend as K
-import skimage
+import numpy as np
+import datetime
+import pathlib
 import time
-import skimage.morphology 
-# imports mabel:
-import matplotlib.pyplot as plt
-from skimage.filters import rank
-from sklearn.utils import shuffle
-from skimage.morphology import disk
-from skimage.transform import resize
+import os
+
+
+import tensorflow as tf
+# from tensorflow.keras.layers import Conv2D, Dense, MaxPooling2D, Dropout, Activation, Flatten, Input, concatenate, UpSampling2D, BatchNormalization
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, accuracy_score, average_precision_score
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from tensorflow.keras.models import Model, load_model, Sequential
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from tensorflow.keras.optimizers import Adam, SGD, RMSprop
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import *
-from contextlib import redirect_stdout
-from sklearn.metrics import confusion_matrix
+
+
+import skimage
 from skimage.util.shape import view_as_windows
-from sklearn.metrics import average_precision_score
-from tensorflow.keras.optimizers import Adam, SGD, RMSprop
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from tensorflow.keras.models import Model, load_model, Sequential
-#from tensorflow.keras.applications.vgg16 import preprocess_input
-from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
-import matplotlib.colors
+from skimage.transform import resize
+from skimage.morphology import disk
+from skimage.filters import rank
+import skimage.morphology 
+
 cmap = matplotlib.colors.ListedColormap(['blue', 'olive'])
 
 patch_size = 256
@@ -57,22 +52,14 @@ tiles_tr = [1,3,5,7,8,10,11,13,14,16,18,20,4,6,19]
 tiles_val = [2, 9, 12] # [4,6,19]
 tiles_ts = (list(set(np.arange(20)+1)-set(tiles_tr)-set(tiles_val)))
 
-print('tiles_tr:', tiles_tr)
-print('tiles_val:', tiles_val)
-print('tiles_ts:', tiles_ts)
-
 batch_size = 32
 epochs = 100
 nb_filters = [32, 64, 128]
 times = 1
 patience_value = 2
 
-import time
-import datetime
+
 ts = time.time()
-# st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
-# output_folder = 'output_' + str(patch_size) + '_' + str(batch_size) + '_' + str(epochs) + '_' + str(patience_value) + '_' + st
-# os.makedirs(output_folder, exist_ok = True)
 
 
 def pred_reconctruct(h, w, num_patches_x, num_patches_y, patch_size_x, patch_size_y, patches_pred):
@@ -83,6 +70,7 @@ def pred_reconctruct(h, w, num_patches_x, num_patches_y, patch_size_x, patch_siz
             img_reconstructed[patch_size_x*j:patch_size_x*(j+1),patch_size_y*i:patch_size_y*(i+1)]=patches_pred[count]
             count+=1
     return img_reconstructed
+
 
 def load_tif_image(patch):
     # Read tiff Image
@@ -96,6 +84,7 @@ def load_tif_image(patch):
     print(type(img), img.shape)
     return img
 
+
 def resize_image(image, height, width):
     im_resized = np.zeros((height, width, image.shape[2]), dtype='float32')
     for b in range(image.shape[2]):
@@ -103,6 +92,7 @@ def resize_image(image, height, width):
         #(width, height) = (ref_2019.shape[1], ref_2019.shape[0])
         im_resized[:,:,b] = np.array(band.resize((width, height), resample=Image.NEAREST))
     return im_resized
+
 
 def filter_outliers(img, bins=1000000, bth=0.001, uth=0.999, mask=[0]):
     img[np.isnan(img)]=0 # Filter NaN values.
@@ -117,6 +107,7 @@ def filter_outliers(img, bins=1000000, bth=0.001, uth=0.999, mask=[0]):
         img[:,:, band][img[:,:, band]<min_value] = min_value
     return img
 
+
 def normalization(image, norm_type = 1):
     image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
     if (norm_type == 1):
@@ -130,111 +121,7 @@ def normalization(image, norm_type = 1):
     image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2])
     return image_normalized1
 
-def unet(input_shape, n_classes):
 
-  input_img = Input(input_shape)
-  # You must complete the U-Net architecture
-
-  down1 = Conv2D(32, (3, 3), padding='same')(input_img)
-  down1 = BatchNormalization()(down1)
-  down1 = Activation('relu')(down1)
-  down1 = Conv2D(32, (3, 3), padding='same')(down1)
-  down1 = BatchNormalization()(down1)
-  down1 = Activation('relu')(down1)
-  down1_pool = MaxPooling2D((2, 2), strides=(2, 2))(down1)
-  # 32
-
-  down2 = Conv2D(64, (3, 3), padding='same')(down1_pool)
-  down2 = BatchNormalization()(down2)
-  down2 = Activation('relu')(down2)
-  down2 = Conv2D(64, (3, 3), padding='same')(down2)
-  down2 = BatchNormalization()(down2)
-  down2 = Activation('relu')(down2)
-  down2_pool = MaxPooling2D((2, 2), strides=(2, 2))(down2)
-  # 32
-
-  down3 = Conv2D(128, (3, 3), padding='same')(down2_pool)
-  down3 = BatchNormalization()(down3)
-  down3 = Activation('relu')(down3)
-  down3 = Conv2D(128, (3, 3), padding='same')(down3)
-  down3 = BatchNormalization()(down3)
-  down3 = Activation('relu')(down3)
-  down3_pool = MaxPooling2D((2, 2), strides=(2, 2))(down3)
-  # 16
-
-  down4 = Conv2D(256, (3, 3), padding='same')(down3_pool)
-  down4 = BatchNormalization()(down4)
-  down4 = Activation('relu')(down4)
-  down4 = Conv2D(256, (3, 3), padding='same')(down4)
-  down4 = BatchNormalization()(down4)
-  down4 = Activation('relu')(down4)
-  down4_pool = MaxPooling2D((2, 2), strides=(2, 2))(down4)
-  # 8
-
-  center = Conv2D(512, (3, 3), padding='same')(down4_pool)
-  center = BatchNormalization()(center)
-  center = Activation('relu')(center)
-  center = Conv2D(512, (3, 3), padding='same')(center)
-  center = BatchNormalization()(center)
-  center = Activation('relu')(center)
-  # center
-
-  up4 = UpSampling2D((2, 2))(center)
-  up4 = concatenate([down4, up4], axis=3)
-  up4 = Conv2D(256, (3, 3), padding='same')(up4)
-  up4 = BatchNormalization()(up4)
-  up4 = Activation('relu')(up4)
-  up4 = Conv2D(256, (3, 3), padding='same')(up4)
-  up4 = BatchNormalization()(up4)
-  up4 = Activation('relu')(up4)
-  up4 = Conv2D(256, (3, 3), padding='same')(up4)
-  up4 = BatchNormalization()(up4)
-  up4 = Activation('relu')(up4)
-  # 16
-
-  up3 = UpSampling2D((2, 2))(up4)
-  up3 = concatenate([down3, up3]) #, axis=3)
-  up3 = Conv2D(128, (3, 3), padding='same')(up3)
-  up3 = BatchNormalization()(up3)
-  up3 = Activation('relu')(up3)
-  up3 = Conv2D(128, (3, 3), padding='same')(up3)
-  up3 = BatchNormalization()(up3)
-  up3 = Activation('relu')(up3)
-  up3 = Conv2D(128, (3, 3), padding='same')(up3)
-  up3 = BatchNormalization()(up3)
-  up3 = Activation('relu')(up3)
-  # 32
-
-  up2 = UpSampling2D((2, 2))(up3)
-  up2 = concatenate([down2, up2])#, axis=3)
-  up2 = Conv2D(64, (3, 3), padding='same')(up2)
-  up2 = BatchNormalization()(up2)
-  up2 = Activation('relu')(up2)
-  up2 = Conv2D(64, (3, 3), padding='same')(up2)
-  up2 = BatchNormalization()(up2)
-  up2 = Activation('relu')(up2)
-  up2 = Conv2D(64, (3, 3), padding='same')(up2)
-  up2 = BatchNormalization()(up2)
-  up2 = Activation('relu')(up2)
-  # 32
-
-  up1 = UpSampling2D((2, 2))(up2)
-  up1 = concatenate([down1, up1]) #, axis=3)
-  up1 = Conv2D(32, (3, 3), padding='same')(up1)
-  up1 = BatchNormalization()(up1)
-  up1 = Activation('relu')(up1)
-  up1 = Conv2D(32, (3, 3), padding='same')(up1)
-  up1 = BatchNormalization()(up1)
-  up1 = Activation('relu')(up1)
-  up1 = Conv2D(32, (3, 3), padding='same')(up1)
-  up1 = BatchNormalization()(up1)
-  up1 = Activation('relu')(up1)
-  # 128
-
-  output = Conv2D(n_classes,(1,1), activation = 'softmax')(up1)
-  return Model(inputs = input_img, outputs = output, name='U-Net')
-
-# U-Net model
 def build_unet(input_shape, nb_filters, n_classes):
     input_layer = Input(input_shape)
  
@@ -266,6 +153,7 @@ def build_unet(input_shape, nb_filters, n_classes):
     
     return Model(input_layer , output)
 
+
 def weighted_categorical_crossentropy(weights):
         """
         A weighted version of keras.objectives.categorical_crossentropy
@@ -289,6 +177,7 @@ def weighted_categorical_crossentropy(weights):
             loss = - K.mean(loss, -1)
             return loss
         return loss
+
 
 def Train_model(net, patches_train, patches_tr_lb_h, patches_val, patches_val_lb_h, batch_size, epochs, patience_value):
   print('Start training.. ')
@@ -353,10 +242,12 @@ def Train_model(net, patches_train, patches_tr_lb_h, patches_val, patches_val_lb
 
   return net, validation_accuracy, training_accuracy
 
+
 def Test(model, patch_test):
   result = model.predict(patch_test)
   predicted_class = np.argmax(result, axis=-1)
   return predicted_class
+
 
 def compute_metrics(true_labels, predicted_labels):
   accuracy = 100*accuracy_score(true_labels, predicted_labels)
@@ -365,7 +256,8 @@ def compute_metrics(true_labels, predicted_labels):
   precision = 100*precision_score(true_labels, predicted_labels, average=None)
   return accuracy, f1score, recall, precision
 
-# def extract_patches(image, reference, patch_size=256, stride=128):
+
+def extract_patches(image, reference, patch_size=256, stride=128):
 
   transformed_ref = np.zeros(shape=(reference.shape[0],reference.shape[1]))
   h, w, c = reference.shape
@@ -411,6 +303,7 @@ def compute_metrics(true_labels, predicted_labels):
   ref_array = np.array(ref_list)
 
   return img_array, ref_array, border_size
+
 
 def unpatch_image(patches, stride, border_size, original_image):
 
@@ -492,6 +385,7 @@ def matrics_AA_recall(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_,
     metrics_ = np.asarray(metrics_all)
     return metrics_
  
+
 def complete_nan_values(metrics):
   vec_prec = metrics[:,1]
   for j in reversed(range(len(vec_prec))):
@@ -501,6 +395,7 @@ def complete_nan_values(metrics):
               vec_prec[j] == 1
   metrics[:,1] = vec_prec
   return metrics 
+
 
 def load_patches(root_path, folder):
   imgs_dir = root_path + folder + '/imgs/'
@@ -518,6 +413,7 @@ def load_patches(root_path, folder):
     patches_ref.append(np.load(mask_path))
   return np.array(patches), np.array(patches_ref)
 
+
 def create_mask(size_rows, size_cols, grid_size=(6,3)):
     num_tiles_rows = size_rows//grid_size[0]
     num_tiles_cols = size_cols//grid_size[1]
@@ -532,6 +428,7 @@ def create_mask(size_rows, size_cols, grid_size=(6,3)):
     #plt.imshow(mask)
     print('Mask size: ', mask.shape)
     return mask
+
 
 print(root_path)
 sent2_2019_1 = load_tif_image(root_path + '2019_10m_b2348.tif').astype('float32')
@@ -558,14 +455,6 @@ mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5,
 image_array = image_array[:mask_tiles.shape[0], :mask_tiles.shape[1],:]
 final_mask = final_mask[:mask_tiles.shape[0], :mask_tiles.shape[1]]
 
-# size_rows = final_mask.shape[0]
-# size_cols = final_mask.shape[1]
-# grid_size=(5, 4)
-# num_tiles_rows = size_rows//grid_size[0]
-# num_tiles_cols = size_cols//grid_size[1]
-# print('tiles size:', num_tiles_rows, num_tiles_cols)
-# exit()
-
 # Training and validation mask
 mask_tr_val = np.zeros((mask_tiles.shape)).astype('float32')
 for tr_ in tiles_tr:
@@ -584,94 +473,6 @@ plt.figure(figsize=(10,5))
 plt.imshow(final_mask, cmap = cmap)
 print('[2]final mask unique:', np.unique(final_mask))
 plt.savefig(output_folder + '/final_mask.png')
-
-# Training patches
-# border_size = 0
-# patches_train, patches_tr_ref = load_patches(root_path, training_dir)
-# Validation patches
-# patches_val, patches_val_ref = load_patches(root_path, validation_dir)
-# Test patches
-# patches_test, patches_test_ref = load_patches(root_path, validation_dir)
-
-# print("Patches for Training:", str(patches_train.shape[0]), str(patches_tr_ref.shape[0]))
-# print("Patches for Validation:", str(patches_val.shape[0]), str(patches_val_ref.shape[0]))
-# print("Patches for Testing:", str(patches_test.shape[0]), str(patches_test_ref.shape[0]))
-
-# patches_tr_lb_h = tf.keras.utils.to_categorical(patches_tr_ref, number_class)
-# patches_val_lb_h = tf.keras.utils.to_categorical(patches_val_ref, number_class)
-# patches_te_lb_h = tf.keras.utils.to_categorical(patches_test_ref, number_class)
-
-os.makedirs('checkpoints', exist_ok=True)
-# Train the model
-# adam = Adam(lr = 0.0001 , beta_1=0.9)
-# weights = [0.2, 0.8]
-# print("Weights:", weights)
-# loss = weighted_categorical_crossentropy(weights)
-# # net = unet((patch_size, patch_size, channels), number_class)
-# net = build_unet((patch_size, patch_size, channels), nb_filters, number_class)
-# net.summary()
-# net.compile(loss = loss, optimizer=adam , metrics=['accuracy'])
-
-# model, validation_accuracy, training_accuracy = Train_model(net, patches_train, patches_tr_lb_h, patches_val, patches_val_lb_h, batch_size, epochs, patience_value)
-# name = 'checkpoints/model_{}_epochs_{}_bsize.h5'.format(epochs,batch_size)
-# model.save(name)
-
-# plt.figure(figsize=(8, 8))
-# plt.subplot(2, 1, 1)
-# plt.plot(training_accuracy, label='Training Accuracy')
-# plt.plot(validation_accuracy, label='Validation Accuracy')
-# plt.legend(loc='lower right')
-# plt.ylabel('Accuracy')
-# plt.ylim([min(plt.ylim()),1])
-# plt.savefig(output_folder + '/training_accuracy.png')
-
-# model = load_model(name, compile=False)
-# for l in range(1, len(model.layers)):
-#     new_model.layers[l].set_weights(model.layers[l].get_weights())
-
-# test model on entire image
-# rows, cols = np.where(mask_tiles == 1.)
-# x1 = np.min(rows)
-# y1 = np.min(cols)
-# x2 = np.max(rows)
-# y2 = np.max(cols)
-# tile_img = image_array[x1:x2 + 1, y1:y2 + 1, :]
-# tile_ref = final_mask[x1:x2 + 1, y1:y2 + 1]
-# input_shape = tile_img.shape
-# print('input_shape:', input_shape)
-# print('image_array.shape:', image_array.shape)
-# # new_model = unet(input_shape, number_class)
-# new_model = build_unet(input_shape, nb_filters, number_class)
-
-# predicted_labels = Test(new_model, patches_test)
-# tiles_ts: [17, 15]
-# metrics_ = []
-# for current_tile in tiles_ts:
-#   print('tile:', current_tile)
-#   # tile_image = image_array[mask_tiles == current_tile]
-#   # tile_mask = final_mask[mask_tiles == current_tile]
-#   rows, cols = np.where(mask_tiles == current_tile)
-#   x1 = np.min(rows)
-#   y1 = np.min(cols)
-#   x2 = np.max(rows)
-#   y2 = np.max(cols)
-#   tile_img = image_array[x1:x2 + 1, y1:y2 + 1, :]
-#   tile_ref = final_mask[x1:x2 + 1, y1:y2 + 1]
-#   print('tile_image.shape:', tile_image.shape)
-#   print('tile_mask.shape:', tile_mask.shape)
-#   result = new_model.predict(image_array)
-#   predicted_class = np.argmax(result, axis=-1)
-
-# metrics = compute_metrics(tile_mask.flatten(), result.flatten())
-# metrics_.append(metrics)
-
-# print("Accuracy:", metrics[0])
-# print("F1 Score:", metrics[1])
-# print("Recall:", metrics[2])
-# print("Precision:", metrics[3])
-
-# Test the model 
-# output_folder = 'baseline_output_256_32_100_10_2021-07-05_01-33-13/'
 
 tm = 0
 time_ts = []
@@ -698,6 +499,7 @@ input_shape=(patch_size_rows,patch_size_cols, c)
 print('input_shape:', input_shape)
 new_model = build_unet(input_shape, nb_filters, number_class)
 model = load_model(name, compile=False)
+
 for l in range(1, len(model.layers)):
     new_model.layers[l].set_weights(model.layers[l].get_weights())
 
@@ -789,17 +591,10 @@ ax2.axis('off')
 fig.savefig(output_folder + '/ref_5.png')
 plt.close()
 
-# fig = plt.figure(figsize=(15,10))
-# ax1 = fig.add_subplot(121)
-# plt.title('Prediction')
-# im = ax1.imshow(mean_prob[0:300,0:300], cmap =cmap)
-# ax1.axis('off')
-# fig.savefig(output_folder + '/reference.png')
 
-exit()
 # Computing metrics
 mean_prob = mean_prob[:final_mask.shape[0], :final_mask.shape[1]]
-ref1 = np.ones_like(final_mask).astype(np.float32)
+# ref1 = np.ones_like(final_mask).astype(np.float32)
 
 # print('mean_prob.shape:', mean_prob)
 # print('final_mask.shape:', final_mask)
@@ -828,8 +623,8 @@ f.write(str(final_metrics[0]) + ',' +  str(final_metrics[1]) + ',' + str(final_m
 f.close()
 
 # ref1 [final_mask == 2] = 0 # class 1 and class 2 were merged
-TileMask = mask_amazon_ts * ref1
-GTTruePositives = final_mask==1
+# TileMask = mask_amazon_ts * ref1
+# GTTruePositives = final_mask==1
     
 # Npoints = 50
 # Pmax = np.max(mean_prob[GTTruePositives * TileMask ==1])

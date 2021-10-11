@@ -96,39 +96,41 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
         final_imgs = rej_pairs[all_classes]
         selected_patches = rej_pairs_ref[all_classes]
         final_refs = dilate_masks(selected_patches, config) # verificar se sao disjuntas etc
-    
 
     return final_imgs, final_refs
 
 
 def dilate_masks(masks_list, config):
     dilated_masks = []
+    i = 0
     for img_mask in masks_list:
+        # print('mask', i)
         dilation = dilate_mask(img_mask, config)
         dilated_masks.append(dilation)
+        i+=1
     return dilated_masks
 
 
 def dilate_mask(img_mask, config):
     kernel = np.ones((5,5), np.uint8)
-    per_class_1 = calculate_percentage_of_class(img_mask)
+    per_class_1 = 0. #calculate_percentage_of_class(img_mask)
     nb_interations = 1
-    while per_class_1 < config['goal_percentage']:
+    while per_class_1 <= config['goal_percentage']:
         dilation = cv2.dilate(img_mask, kernel, iterations = nb_interations) # borderValue deixou o processo mais lento
         diff = dilation - img_mask 
         dilation[diff == 2.] = 1.
         per_class_1 = calculate_percentage_of_class(dilation)
         nb_interations += 1
-    print(nb_interations)
+    print(nb_interations - 1, per_class_1)
     return dilation
 
 
 def calculate_percentage_of_class(img_mask):
     per_class_1 = 0.
-    unique, counts = np.unique(img_mask[0], return_counts=True)
+    unique, counts = np.unique(img_mask, return_counts=True)
     if 1 in unique:
-        per_class_1 = counts[1]/len(img_mask)
-        # print(per_class_1, counts[1], len(img_mask))
+        per_class_1 = counts[1]/np.sum(counts)
+        # print('>>>', unique, counts[1], np.sum(counts), per_class_1)
     return per_class_1*100
 
 
@@ -374,11 +376,13 @@ def discard_patches_by_percentage(patches, patches_ref, config, new_deforestatio
         patch = patches[i]
         patch_ref = patches_ref[i]
         class1 = patch_ref[patch_ref == new_deforestation_pixel_value]
-        per = int((patch_size ** 2) * (percentage / 100))
+        per = int((patch_size ** 2) * (percentage / 100)) 
+        # print(len(class1), per)
         if len(class1) >= per:
             patches_.append(i)
             patches_ref_.append(i)
         else:
+            # print('descartado')
             rejected_patches_.append(i)
             rejected_patches_ref.append(i) 
             rejected_pixels_count.append(len(class1))
