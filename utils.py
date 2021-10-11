@@ -93,9 +93,10 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
 
     if config['synthetic_input_mode'] == 3: # depois juntar com a de cima, 2
         # ideia 2 pt 2 - adicionando mais desmatamento novo em mascaras com baixa % desmatamento novo
-        final_imgs = rej_pairs[all_classes]
-        selected_patches = rej_pairs_ref[all_classes]
-        final_refs = dilate_masks(selected_patches, config) # verificar se sao disjuntas etc
+        #final_imgs = rej_pairs[all_classes]
+        #selected_patches = rej_pairs_ref[all_classes]
+        #final_refs = dilate_masks(selected_patches, config) # verificar se sao disjuntas etc
+        # essa abordagem ainda ta quebrada, nao usar!
 
     return final_imgs, final_refs
 
