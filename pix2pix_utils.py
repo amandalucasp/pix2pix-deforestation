@@ -46,7 +46,7 @@ def normalize(input_image, real_image):
 @tf.function()
 def random_jitter(input_image, real_image, NUM_CHANNELS=3):
   # Resizing to 286x286
-  input_image, real_image = resize(input_image, real_image, 286, 286)
+  input_image, real_image = resize(input_image, real_image, (IMG_HEIGHT + 30), (IMG_WIDTH + 30))
   # Random cropping back to 256x256
   input_image, real_image = random_crop(input_image, real_image, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS)
   if tf.random.uniform(()) > 0.5:

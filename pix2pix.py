@@ -80,24 +80,24 @@ def Generator(input_shape=[256, 256, 3]):
   inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
 
   down_stack = [
-    downsample(64, 4, apply_batchnorm=False),  # (batch_size, 128, 128, 64)
-    downsample(128, 4),  # (batch_size, 64, 64, 128)
-    downsample(256, 4),  # (batch_size, 32, 32, 256)
-    downsample(512, 4),  # (batch_size, 16, 16, 512)
-    downsample(512, 4),  # (batch_size, 8, 8, 512)
-    downsample(512, 4),  # (batch_size, 4, 4, 512)
-    downsample(512, 4),  # (batch_size, 2, 2, 512)
-    downsample(512, 4),  # (batch_size, 1, 1, 512)
+    downsample(input_shape[0]//4, 4, apply_batchnorm=False),  # (batch_size, 128, 128, 64) 64, 64, 32
+    downsample(input_shape[0]//2, 4),  # (batch_size, 64, 64, 128) 32, 32, 64
+    downsample(input_shape[0], 4),  # (batch_size, 32, 32, 256) 16, 16, 128
+    downsample(2*input_shape[0], 4),  # (batch_size, 16, 16, 512) 8, 8, 256
+    downsample(2*input_shape[0], 4),  # (batch_size, 8, 8, 512) 4, 4, 256
+    downsample(2*input_shape[0], 4),  # (batch_size, 4, 4, 512) 2, 2, 256
+    downsample(2*input_shape[0], 4),  # (batch_size, 2, 2, 512) 1, 1, 256
+    downsample(2*input_shape[0], 4),  # (batch_size, 1, 1, 512) 1, 1, 256
   ]
 
   up_stack = [
-    upsample(512, 4, apply_dropout=True),  # (batch_size, 2, 2, 1024)
-    upsample(512, 4, apply_dropout=True),  # (batch_size, 4, 4, 1024)
-    upsample(512, 4, apply_dropout=True),  # (batch_size, 8, 8, 1024)
-    upsample(512, 4),  # (batch_size, 16, 16, 1024)
-    upsample(256, 4),  # (batch_size, 32, 32, 512)
-    upsample(128, 4),  # (batch_size, 64, 64, 256)
-    upsample(64, 4),  # (batch_size, 128, 128, 128)
+    upsample(2*input_shape[0], 4, apply_dropout=True),  # (batch_size, 2, 2, 512) -> 1024 
+    upsample(2*input_shape[0], 4, apply_dropout=True),  # (batch_size, 4, 4, 512) -> 1024
+    upsample(2*input_shape[0], 4, apply_dropout=True),  # (batch_size, 8, 8, 512) -> 1024
+    upsample(2*input_shape[0], 4),  # (batch_size, 16, 16, 512) -> 1024
+    upsample(input_shape[0], 4),  # (batch_size, 32, 32, 256) -> 512
+    upsample(input_shape[0]//2, 4),  # (batch_size, 64, 64, 128) -> 256
+    upsample(input_shape[0]//4, 4),  # (batch_size, 128, 128, 64) ->  128
   ]
 
   initializer = tf.random_normal_initializer(0., 0.02)
@@ -114,6 +114,8 @@ def Generator(input_shape=[256, 256, 3]):
   for down in down_stack:
     x = down(x)
     skips.append(x)
+    if x.shape[1] == 1: # minimum shape at bottleneck
+      break
 
   skips = reversed(skips[:-1])
 
@@ -151,23 +153,26 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3]):
 
   x = tf.keras.layers.concatenate([inp, tar])  # (batch_size, 256, 256, channels*2)
 
-  down1 = downsample(64, 4, False)(x)  # (batch_size, 128, 128, 64)
-  down2 = downsample(128, 4)(down1)  # (batch_size, 64, 64, 128)
-  down3 = downsample(256, 4)(down2)  # (batch_size, 32, 32, 256)
+  down1 = downsample(input_shape[0]//4, 4, False)(x)  # (batch_size, 128, 128, 64) 64, 64, 32
+  down2 = downsample(input_shape[0]//2, 4)(down1)  # (batch_size, 64, 64, 128) 32, 32, 64
+  down3 = downsample(input_shape[0], 4)(down2)  # (batch_size, 32, 32, 256) 16, 16, 128
 
-  zero_pad1 = tf.keras.layers.ZeroPadding2D()(down3)  # (batch_size, 34, 34, 256)
-  conv = tf.keras.layers.Conv2D(512, 4, strides=1,
+  zero_pad1 = tf.keras.layers.ZeroPadding2D()(down3)  # (batch_size, 34, 34, 256) 18, 18, 128
+  conv = tf.keras.layers.Conv2D(2*input_shape[0], 4, strides=1,
                                 kernel_initializer=initializer,
-                                use_bias=False)(zero_pad1)  # (batch_size, 31, 31, 512)
+                                use_bias=False)(zero_pad1)  # (batch_size, 31, 31, 512) 15, 15, 256
 
   batchnorm1 = tf.keras.layers.BatchNormalization()(conv)
+  # print('batchnorm1:', batchnorm1.shape) # (batch_size, 31, 31, 512) 15, 15, 256
 
   leaky_relu = tf.keras.layers.LeakyReLU()(batchnorm1)
+  # print('leaky_relu:', leaky_relu.shape) # (batch_size, 31, 31, 512) 15, 15, 256
 
-  zero_pad2 = tf.keras.layers.ZeroPadding2D()(leaky_relu)  # (batch_size, 33, 33, 512)
+  zero_pad2 = tf.keras.layers.ZeroPadding2D()(leaky_relu)  # (batch_size, 33, 33, 512) 17, 17, 256
+  # print('zero_pad2:', zero_pad2.shape)
 
   last = tf.keras.layers.Conv2D(1, 4, strides=1,
-                                kernel_initializer=initializer)(zero_pad2)  # (batch_size, 30, 30, 1)
+                                kernel_initializer=initializer)(zero_pad2)  # (batch_size, 30, 30, 1) 14, 14, 1
 
   return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
