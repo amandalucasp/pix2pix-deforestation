@@ -14,11 +14,13 @@ from skimage.util import view_as_windows
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from utils import *
 
+start_time = time.time()
+
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 
 stride = int((1 - config['overlap']) * config['patch_size'])
-tiles_ts = [7,8] # (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
+tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val']))) # [7,8] 
 
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
 # config['output_path'] = config['output_path'] + 'min_percentage' + str(config['min_percentage'])
@@ -32,12 +34,6 @@ image_stack, final_mask = get_dataset(config)
 # Normalization
 image_array = normalization(image_stack.copy(), config['type_norm'])
 del image_stack
-
-# sample = image_array[:500,:500,:3]
-# sample_mask = final_mask[:500, :500]
-# cv2.imwrite('sample_image_array_cv2.png', sample)
-# imageio.imwrite('sample_image_array.png', sample)
-# imageio.imwrite('sample_mask.png', sample_mask)
 
 # Print percentage of each class (whole image)
 print('Total no-deforestaion class is {}'.format(len(final_mask[final_mask==0])))
@@ -83,21 +79,13 @@ if config['save_tiles']:
 
 print("[*] EXTRACTING PATCHES")
 
-patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
-patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, config['patch_size'], stride)
-patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, config['patch_size'], stride)
+print('Extracting training patches')
+patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, stride, config)
+print('Extracting validation patches')
+patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, stride, config)
+print('Extracting test patches')
+patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, stride, config)
 del image_array, final_mask
-patches_trn, patches_trn_ref, rej_patches_trn, rej_patches_trn_ref, rej_count_trn = discard_patches_by_percentage(patches_trn, patches_trn_ref, config)
-patches_val, patches_val_ref, rej_patches_val, rej_patches_val_ref, rej_count_val = discard_patches_by_percentage(patches_val, patches_val_ref, config)
-patches_tst, patches_tst_ref, rej_patches_tst, rej_patches_tst_ref, rej_count_tst = discard_patches_by_percentage(patches_tst, patches_tst_ref, config)
-
-
-# unique, counts = np.unique(mask[0], return_counts=True)
-
-# print(y)
-
-
-# exit()
 
 print('[*] Training patches:', patches_trn.shape)
 print('[*] Validation patches:', patches_val.shape)
@@ -128,21 +116,8 @@ if config['save_image_pairs']:
     save_image_pairs(patches_val, patches_val_ref, val_out_path, config)
     print('Saving testing pairs...')
     save_image_pairs(patches_tst, patches_tst_ref, tst_out_path, config)
+
 del patches_trn, patches_trn_ref, patches_val, patches_val_ref, patches_tst, patches_tst_ref
-
-################### CREATE INPUT FOR THE TRAINED PI2XPI2 GENERATOR
-
-if config['create_input_pix2pix']:
-    print('[*] CREATING INPUT FOR THE TRAINED MODEL')
-    final_out_path = config['output_path'] + '/trained_input'
-    print('Concatenating pairs...')
-    rej_pairs = np.concatenate((rej_patches_trn, rej_patches_val, rej_patches_tst), axis=0)
-    rej_pairs_ref = np.concatenate((rej_patches_trn_ref, rej_patches_val_ref, rej_patches_tst_ref),axis=0)
-    # rej_pixels_count = np.concatenate((rej_count_trn, rej_count_val, rej_count_tst),axis=0)
-    print('Processing masks...')
-    final_pairs, final_pairs_ref = process_masks(rej_pairs, rej_pairs_ref, config)
-    print('Saving pairs...')
-    save_image_pairs(final_pairs, final_pairs_ref, final_out_path, config, synthetic_input_pairs=True)
 
 ################### EXTRACT MINIPATCHES (FOREST AND DEFORESTATION)
 
@@ -153,4 +128,5 @@ if config['extract_minipatches']:
     print('[*] Saving validation minipatches.')
     save_minipatches(patches_val, patches_val_ref, val_out_path, config)
 
-print('[*] Preprocessing done.')
+elapsed_time = time.time() - start_time
+print('[*] Preprocessing done. Elapsed time:', elapsed_time, 'seconds.')
