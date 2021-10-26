@@ -6,24 +6,27 @@ change_detection: True
 # two_classes_problem - if True, uses a binary mask. if False, uses a 3-classes mask.
 two_classes_problem: False 
 # tiles usados para treinamento e validacao
-tiles_tr: [1,3,5] #,7,8,10,11,13,14,16,18,20,4,6,19]
+tiles_tr: [1, 3, 5, 7, 8, 10, 11, 13, 14, 16, 18, 20, 4, 6, 19] # [1,3,5]
 tiles_val: [2, 9, 12]
 # stride is set to 0.5*patch_size
 patch_size: 128
-overlap: 0.5
-save_patches: False # if False, save only image pairs (expected input from pix2pix net)
-save_tiles: False # save testing tiles 
-save_image_pairs: False
-create_input_pix2pix: True # if True, save rejected image pairs in order to feed them to the trained generator
-synthetic_input_mode: 2 # 0: usa as mascaras originais, 1: usa mascaras dilatadas...
-goal_percentage: 5 # minimum percentage when using dilation
+overlap: 0.7
+save_patches: True # if False, save only image pairs (expected input from pix2pix net)
+save_tiles: True # save testing tiles 
+save_image_pairs: True
+synthetic_input_mode: 1
+# 0: mascaras originais
+# 1: patches sem desmatamento + masks de desmatamento passado -> pixels de desm. passado >>> novo
+# 2: patches com desmatamento passado -> aplico dilate e chamo a dilatacao de desmatamento novo
+# 3: patches com as 3 classes -> aplico dilate no desmatamento novo
+goal_percentage: 3 # minimum percentage when using dilation
 # minimum NEW deforestation required per patch (new deforestation - class 1)
 # 0: forest, 1: new deforestation, 2: old deforestation
-min_percentage: 5
+min_percentage: 3
 # path to images
 root_path: '../Sentinel2/' 
 # path to save patches
-output_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples-teste'
+output_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128'
 # limite utilizado das imagens de entrada -> image is (17729, 9202)
 lim_x: 17700 # 1000
 lim_y: 9200 # 7000
@@ -46,14 +49,15 @@ extract_minipatches: False
 minipatch_size: 32
 
 # TRAINING PARAMETERS - PIX2PIX
-training_name: 'teste'
-data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/samples/change_detection_true_two_classes_false'
-training_steps: 5000
-checkpoint_steps: 1000 # interval to save checkpoint
+# training_name: 'v0-128'
+data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false'
+# data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/v0_256/samples_change_detection_true_two_classes_false'
+training_steps: 500000
+checkpoint_steps: 25000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
 lambda: 100
-image_width: 256
-image_height: 256
+image_width: 128
+image_height: 128
 output_channels: 3
 # buffer_size: 100
 
