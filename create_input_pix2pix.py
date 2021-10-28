@@ -17,45 +17,26 @@ from utils import *
 
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
+start = time.time()
 
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
 print(config)
 
-final_out_path = config['output_path'] + '/trained_pix2pix_input'
+final_out_path = config['output_path'] + '/trained_pix2pix_input_mode_' + str(config['synthetic_input_mode']) + '/'
 rej_out_path = config['output_path'] + '/rejected_patches_npy/'
+os.makedirs(final_out_path, exist_ok=True)
+shutil.copy('./config.yaml', final_out_path)
 
 list_imgs = glob.glob(rej_out_path + '*_img.npy')
-list_refs = glob.glob(rej_out_path + '*_ref.npy')
 
-print('[*] Reading img files...')
-imgs = []
-for npy_file in list_imgs:
-    imgs.append(np.load(npy_file))
-rej_pairs = np.concatenate((imgs), axis=0)
+print('[*] Reading files...')
+rej_pairs, rej_pairs_ref = load_npy_files(list_imgs)
 
-print('[*] Reading ref files...')
-refs = []
-for npy_file in list_refs:
-    refs.append(np.load(npy_file))
-rej_pairs_ref = np.concatenate((refs), axis=0)
-
-if config['save_all_rejected']:
-    no_deforestation, new_deforest, old_deforest, only_deforest, all_classes, only_old_deforest = classify_masks(rej_pairs_ref)
-    out_path = config['output_path'] + '/rejected_pairs/no_deforestation'
-    save_image_pairs(rej_pairs[no_deforestation], rej_pairs_ref[no_deforestation], out_path, config, synthetic_input_pairs=True)
-    out_path = config['output_path'] + '/rejected_pairs/new_deforest'
-    save_image_pairs(rej_pairs[new_deforest], rej_pairs_ref[new_deforest], out_path, config, synthetic_input_pairs=True)
-    out_path = config['output_path'] + '/rejected_pairs/old_deforest'
-    save_image_pairs(rej_pairs[old_deforest], rej_pairs_ref[old_deforest], out_path, config, synthetic_input_pairs=True)
-    out_path = config['output_path'] + '/rejected_pairs/only_deforest'
-    save_image_pairs(rej_pairs[only_deforest], rej_pairs_ref[only_deforest], out_path, config, synthetic_input_pairs=True)
-    out_path = config['output_path'] + '/rejected_pairs/all_classes'
-    save_image_pairs(rej_pairs[all_classes], rej_pairs_ref[all_classes], out_path, config, synthetic_input_pairs=True)
-    out_path = config['output_path'] + '/rejected_pairs/only_old_deforest'
-    save_image_pairs(rej_pairs[only_old_deforest], rej_pairs_ref[only_old_deforest], out_path, config, synthetic_input_pairs=True)
+print(np.unique(rej_pairs_ref[0]))
 
 print('[*] Processing masks...')
 final_pairs, final_pairs_ref = process_masks(rej_pairs, rej_pairs_ref, config)
 print('[*] Saving pairs...')
 save_image_pairs(final_pairs, final_pairs_ref, final_out_path, config, synthetic_input_pairs=True)
-print('[*] Done.')
+elapsed_time = time.time() - start
+print('[*] Done. Elapsed time:', str(elapsed_time), 'seconds.')

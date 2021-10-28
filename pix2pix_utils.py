@@ -1,10 +1,37 @@
 from matplotlib import pyplot as plt
 import tensorflow as tf
 import numpy as np
+import imageio
+import yaml
+import os
 
-IMG_WIDTH = 256
-IMG_HEIGHT = 256 
-NUM_CHANNELS = 3 # NUMERO DE CANAIS DE CADA IMAGEM (T1, T2, MASCARA)
+stream = open('./config.yaml')
+config = yaml.load(stream)
+
+IMG_WIDTH = config['image_width']
+IMG_HEIGHT = config['image_height'] 
+NUM_CHANNELS = config['output_channels'] # NUMERO DE CANAIS DE CADA IMAGEM (T1, T2, MASCARA)
+
+
+def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
+    t1_mask = np.squeeze(t1_mask)
+    os.makedirs(saving_path + '/imgs/', exist_ok=True)
+    os.makedirs(saving_path + '/masks/', exist_ok=True)
+    os.makedirs(saving_path + '/combined/', exist_ok=True)
+    
+    t1 = t1_mask[:,:,:NUM_CHANNELS]
+    mask = t1_mask[:,:,NUM_CHANNELS:]
+    t1_t2 = np.concatenate((t1, t2_img), axis=-1)
+
+    h, w, c = t1.shape
+    combined = np.zeros(shape=(h,w*3,c))
+    combined[:,:w,:] = t1
+    combined[:,w:w*2,:] = mask
+    combined[:,2*w:,:] = t2_img
+
+    imageio.imwrite(saving_path + '/combined/' + filename + '.png', combined) # melhorar aqui esse debug
+    np.save(saving_path + '/imgs/' + filename + '.npy', t1_t2)
+    np.save(saving_path + '/masks/' + filename + '.npy', mask)
 
 
 def load_npy(npy_file):

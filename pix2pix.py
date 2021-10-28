@@ -2,15 +2,22 @@ from datetime import datetime, timedelta
 from matplotlib import pyplot as plt
 import tensorflow as tf
 import numpy as np
+import argparse
 import pathlib
 import imageio
 import shutil
 import glob
 import yaml
 import time
+import cv2
 import os
 
 from pix2pix_utils import *
+
+ap = argparse.ArgumentParser()
+ap.add_argument('-t', '--train', help='run train + inference', action='store_true')
+ap.add_argument('-i', '--inference', help='run inference on input', action='store_true')
+args = ap.parse_args()
 
 print(tf.executing_eagerly())
 
@@ -19,12 +26,11 @@ config = yaml.load(stream)
 
 time_string = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
 # output_folder = config['training_name'] + '/' + time_string
-output_folder = config['data_path'].replace('samples_','train_') + '/' + time_string
+output_folder = config['data_path'] + '/pix2pix/' + time_string
 os.makedirs(output_folder)
 shutil.copy('./config.yaml', output_folder)
 
 BATCH_SIZE = config['batch_size']
-# Each image is 256x256 in size
 IMG_WIDTH = config['image_width']
 IMG_HEIGHT = config['image_height']
 OUTPUT_CHANNELS = config['output_channels']
@@ -278,15 +284,55 @@ def fit(train_ds, test_ds, config):
     if (step + 1) % config['checkpoint_steps'] == 0:
       checkpoint.save(file_prefix=checkpoint_prefix)
 
-start = time.time()
-fit(train_ds, test_ds, config)
-print(f'[*] Time taken for training: {time.time()-start:.2f} sec\n')
 
-os.makedirs(output_folder + '/generated_plots/')
-os.makedirs(config['data_path'] + '/synthetic_data_' + time_string + '/')
-counter = 0
-for inp, tar in test_ds:
-  prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots/' + str(counter) + '.png')
-  imageio.imwrite(config['data_path'] + '/synthetic_data_' + time_string + '/' + str(counter) + '.png', prediction)
-  np.save(config['data_path'] + '/synthetic_data_' + time_string + '/' + str(counter) + '.npy', prediction)
-  counter+=1
+if args.train:
+  start = time.time()
+  fit(train_ds, test_ds, config)
+  print(f'[*] Time taken for training: {time.time()-start:.2f} sec\n')
+
+  os.makedirs(output_folder + '/generated_plots_test/')
+  synthetic_path = output_folder + '/synthetic_data_test/'
+
+  # inp: t1 + mask concatenadas
+  # tar: t2
+
+  counter = 0
+  for inp, tar in test_ds:
+    prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_test/' + str(counter) + '.png')
+    save_synthetic_img(inp, prediction, synthetic_path, str(counter))
+    counter+=1
+
+  tr_input_files = glob.glob(str(npy_path / 'trained_pix2pix_input/pairs/*.npy'))
+  pix2pix_input_ds = tf.data.Dataset.from_tensor_slices(tr_input_files)
+  pix2pix_input_ds = pix2pix_input_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
+  pix2pix_input_ds = pix2pix_input_ds.map(lambda img, label: set_shapes(img, label, input_shape, target_shape))
+  pix2pix_input_ds = pix2pix_input_ds.batch(BATCH_SIZE)
+
+  os.makedirs(output_folder + '/generated_plots_random/')
+  synthetic_path = output_folder + '/synthetic_data_random/'
+
+  counter = 0
+  for inp, tar in pix2pix_input_ds:
+    print(inp.shape, inp[0].shape)
+    prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
+    save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
+    counter+=1
+
+if args.inference:
+  # checkpoint_prefix = os.path.join(config['checkpoint_folder'], "ckpt")
+  checkpoint.restore(tf.train.latest_checkpoint(config['checkpoint_folder']))
+
+  tr_input_files = glob.glob(str(npy_path / 'trained_pix2pix_input/pairs/*.npy'))
+  pix2pix_input_ds = tf.data.Dataset.from_tensor_slices(tr_input_files)
+  pix2pix_input_ds = pixpix2pix_input_ds2pix_input.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
+  pix2pix_input_ds = pix2pix_input_ds.map(lambda img, label: set_shapes(img, label, input_shape, target_shape))
+  pix2pix_input_ds = pix2pix_input_ds.batch(BATCH_SIZE)
+
+  os.makedirs(output_folder + '/generated_plots_random/')
+  synthetic_path = output_folder + '/synthetic_data_random/'
+
+  counter = 0
+  for inp, tar in pix2pix_input_ds:
+    prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
+    save_synthetic_img(inp, prediction, synthetic_path, str(counter))
+    counter+=1
