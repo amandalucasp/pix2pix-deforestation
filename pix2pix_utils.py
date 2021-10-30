@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 import imageio
 import yaml
+import cv2
 import os
 
 stream = open('./config.yaml')
@@ -24,12 +25,12 @@ def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
     t1_t2 = np.concatenate((t1, t2_img), axis=-1)
 
     h, w, c = t1.shape
-    combined = np.zeros(shape=(h,w*3,c))
+    combined = np.zeros(shape=(h,w*3,c), dtype=np.float32)
     combined[:,:w,:] = t1
     combined[:,w:w*2,:] = mask
     combined[:,2*w:,:] = t2_img
 
-    imageio.imwrite(saving_path + '/combined/' + filename + '.png', combined) # melhorar aqui esse debug
+    imageio.imwrite(saving_path + '/combined/' + filename + '.png', cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)) # melhorar aqui esse debug
     np.save(saving_path + '/imgs/' + filename + '.npy', t1_t2)
     np.save(saving_path + '/masks/' + filename + '.npy', mask)
 
@@ -134,7 +135,10 @@ def generate_images(model, test_input, tar, filename=None):
   prediction = model(test_input, training=True)
   if filename:
     fig = plt.figure(figsize=(15, 15))
-    display_list = [test_input[0][:,:,:NUM_CHANNELS], test_input[0][:,:,NUM_CHANNELS:], tar[0], prediction[0]]
+    display_list = [cv2.cvtColor(test_input[0][:,:,:NUM_CHANNELS].numpy(), cv2.COLOR_BGR2RGB),
+                    cv2.cvtColor(test_input[0][:,:,NUM_CHANNELS:].numpy(), cv2.COLOR_BGR2RGB),
+                    cv2.cvtColor(tar[0].numpy(), cv2.COLOR_BGR2RGB),
+                    cv2.cvtColor(prediction[0].numpy(), cv2.COLOR_BGR2RGB)]
     title = ['Input Image T1', 'Mask', 'Actual T2', 'Predicted T2']
     for i in range(4):
       plt.subplot(1, 4, i+1)

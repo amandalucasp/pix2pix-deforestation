@@ -256,10 +256,10 @@ def fit(train_ds, test_ds, config):
       plot_list = []
       for inp, tar in test_ds.take(3):
         prediction = generate_images(generator, inp, tar)
-        plot_list.append(inp[0][:,:,:3])
-        plot_list.append(inp[0][:,:,3:])
-        plot_list.append(tar[0])
-        plot_list.append(prediction)
+        plot_list.append(cv2.cvtColor(inp[0][:,:,:config['output_channels']].numpy(), cv2.COLOR_BGR2RGB))
+        plot_list.append(cv2.cvtColor(inp[0][:,:,config['output_channels']:].numpy(), cv2.COLOR_BGR2RGB))
+        plot_list.append(cv2.cvtColor(tar[0].numpy(), cv2.COLOR_BGR2RGB))
+        plot_list.append(cv2.cvtColor(prediction.numpy(), cv2.COLOR_BGR2RGB))
         i+=1
       fig = plt.figure(figsize=(15, 15))
       title = ['T1', 'Mask', 'T2', 'Prediction']
@@ -313,7 +313,7 @@ if args.train:
 
   counter = 0
   for inp, tar in pix2pix_input_ds:
-    print(inp.shape, inp[0].shape)
+    print(inp.shape, inp[0].shape) # ver de tirar esse [0]
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
     save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
     counter+=1
