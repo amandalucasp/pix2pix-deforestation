@@ -61,8 +61,8 @@ def random_crop(input_image, real_image, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS=3):
   mask = input_image[:, :, NUM_CHANNELS:]
   stacked_image = tf.stack([t1, mask, real_image])
   cropped_image = tf.image.random_crop(stacked_image, size=[3, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS])
-  input_image = tf.stack([cropped_image[0], cropped_image[1]]) # t1 + mask
-  return input_image, cropped_image[2]
+  concat_image = tf.concat([cropped_image[0], cropped_image[1]], axis=-1)
+  return concat_image, cropped_image[2]
 
 
 def normalize(input_image, real_image):   
