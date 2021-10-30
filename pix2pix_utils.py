@@ -30,7 +30,7 @@ def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
     combined[:,w:w*2,:] = mask
     combined[:,2*w:,:] = t2_img
 
-    imageio.imwrite(saving_path + '/combined/' + filename + '.png', cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)) # melhorar aqui esse debug
+    imageio.imwrite(saving_path + '/combined/' + filename + '.png', cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
     np.save(saving_path + '/imgs/' + filename + '.npy', t1_t2)
     np.save(saving_path + '/masks/' + filename + '.npy', mask)
 
@@ -57,11 +57,12 @@ def resize(input_image, real_image, height, width):
 
 
 def random_crop(input_image, real_image, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS=3):
-  # stacked_image = tf.stack([input_image, real_image], axis=0)
-  input_image = tf.image.random_crop(input_image, size=[IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS*2]) # t1 + mascara
-  real_image = tf.image.random_crop(real_image, size=[IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS]) # t2
-  # cropped_image = tf.image.random_crop(stacked_image, size=[2, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS])
-  return input_image, real_image
+  t1 = input_image[:, :, :NUM_CHANNELS]
+  mask = input_image[:, :, NUM_CHANNELS:]
+  stacked_image = tf.stack([t1, mask, real_image])
+  cropped_image = tf.image.random_crop(stacked_image, size=[3, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS])
+  input_image = tf.stack([cropped_image[0], cropped_image[1]]) # t1 + mask
+  return input_image, cropped_image[2]
 
 
 def normalize(input_image, real_image):   
