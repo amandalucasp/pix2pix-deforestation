@@ -105,11 +105,11 @@ def set_shapes(img, label, img_shape, label_shape):
   return img, label
 
 
-def downsample(filters, size, apply_batchnorm=True):
+def downsample(filters, size, apply_batchnorm=True, padding_mode='same'):
   initializer = tf.random_normal_initializer(0., 0.02)
   result = tf.keras.Sequential()
   result.add(
-      tf.keras.layers.Conv2D(filters, size, strides=2, padding='same',
+      tf.keras.layers.Conv2D(filters, size, strides=2, padding=padding_mode,
                              kernel_initializer=initializer, use_bias=False))
   if apply_batchnorm:
     result.add(tf.keras.layers.BatchNormalization())
