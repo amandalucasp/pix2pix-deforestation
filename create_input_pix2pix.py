@@ -32,8 +32,6 @@ list_imgs = glob.glob(rej_out_path + '*_img.npy')
 print('[*] Reading files...')
 rej_pairs, rej_pairs_ref = load_npy_files(list_imgs)
 
-print(np.unique(rej_pairs_ref[0]))
-
 print('[*] Processing masks...')
 final_pairs, final_pairs_ref = process_masks(rej_pairs, rej_pairs_ref, config)
 print('[*] Saving pairs...')

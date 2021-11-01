@@ -6,7 +6,7 @@ change_detection: True
 # two_classes_problem - if True, uses a binary mask. if False, uses a 3-classes mask.
 two_classes_problem: False 
 # tiles usados para treinamento e validacao
-tiles_tr: [1, 3, 5, 7, 8, 10, 11, 13, 14, 16, 18, 20, 4, 6, 19] # [1,3,5]
+tiles_tr: [1, 3, 5, 7, 8, 10, 11, 13, 14, 16, 18, 20, 4, 6, 19] # 
 tiles_val: [2, 9, 12]
 # stride is set to 0.5*patch_size
 patch_size: 128
@@ -55,15 +55,20 @@ data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_det
 training_steps: 250000
 checkpoint_steps: 25000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
-lambda: 100
+lambda: 100 # weight on L1 term
+gan_weight: 1.0 # weight on GAN term
 image_width: 128
 image_height: 128
 output_channels: 3
 #checkpoint_folder: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/27_10_2021_12_00_41/training_checkpoints' # used when running with --inference flag
-#buffer_size: 50
+# buffer_size: 100
+ngf: 64 # number of generator filters in first conv layer
+ndf: 64 # number of discriminator filters in first conv layer
+lr: 0.0002 # initial learning rate for Adam
+beta1: 0.5 # momentum for Adam
 
 # TRAINING PARAMETERS - UNET
-synthetic_data_path: ''
+synthetic_data_path: '/pix2pix/28_10_2021_01_11_16/synthetic_data_random/'
 training_output_path: '/unet-results/'
 input_channels: 6
 epochs_unet: 100
