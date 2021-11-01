@@ -113,7 +113,7 @@ def downsample(filters, size, apply_batchnorm=True):
                              kernel_initializer=initializer, use_bias=False))
   if apply_batchnorm:
     result.add(tf.keras.layers.BatchNormalization())
-  result.add(tf.keras.layers.LeakyReLU())
+  result.add(tf.keras.layers.LeakyReLU(alpha=0.2))
   return result
 
 
