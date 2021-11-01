@@ -1,4 +1,6 @@
+import os
 import gdal
+import time
 import skimage
 import imageio
 import cv2
@@ -12,6 +14,26 @@ from skimage.util import view_as_windows
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
+def load_npy_files(files_list):
+    npys_imgs = []
+    npys_refs = []
+    i = 0
+    for img_file in files_list:
+
+        start = time.time()
+        npys_imgs.append(np.load(img_file))
+        elapsed = time.time() - start
+        print(os.path.basename(img_file), elapsed)
+
+        start = time.time()
+        ref_file = img_file.replace('_img', '_ref')
+        npys_refs.append(np.load(ref_file))
+        elapsed = time.time() - start
+        print(os.path.basename(ref_file), elapsed)
+        
+    return np.concatenate((npys_imgs), axis=0), np.concatenate((npys_refs), axis=0)
+
+
 def classify_masks(rej_pairs_ref):
     no_deforestation = []
     new_deforest = []
@@ -22,25 +44,24 @@ def classify_masks(rej_pairs_ref):
 
     for i in range(len(rej_pairs_ref)):
         current_mask = rej_pairs_ref[i]
-        unique, counts = np.unique(current_mask[0], return_counts=True)
+        unique = np.unique(current_mask, return_counts=False)
         if np.array_equal(unique, [0.]):
-            # print('sem desmatamento')
+            # print('no_deforestation')
             no_deforestation.append(i)
         elif np.array_equal(unique, [2.]):
-            # print('so desmatamento velho')
+            # print('only_old_deforest')
             only_old_deforest.append(i)
         elif np.array_equal(unique, [0., 1.]):
-            # print('desmatamento novo')
+            # print('new_deforest')
             new_deforest.append(i)
-        elif np.array_equal(unique, [0., 2.]):
-            # mascara tem so desmatamento antigo 
-            # print('desmatamento velho')
+        elif np.array_equal(unique, [0., 2.]): 
+            # print('old_deforest')
             old_deforest.append(i)
         elif np.array_equal(unique, [1., 2.]):
-            # print('so desmatamento, antigo e novo')
+            # print('only_deforest')
             only_deforest.append(i)
         else:
-            # print('patch tem as 3 classes')
+            # print('all_classes')
             all_classes.append(i)
 
     print('[*] Total rejected patches:', len(rej_pairs_ref))
@@ -522,7 +543,11 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, stride, config):
         patches_img, patch_ref, rej_patches, rej_patches_ref = discard_patches_by_percentage(patches_img, patch_ref, config)
         # salva os patches rejeitados
         np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_img.npy', rej_patches) 
-        np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref.npy', rej_patches_ref) 
+        np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref.npy', rej_patches_ref)
+        # todo separar por classes aqui ja?
+        #no_deforestation, new_deforest, old_deforest, only_deforest, all_classes, only_old_deforest, only_new_deforest = classify_masks(rej_patches_ref, save=True)
+        #save_npy_array(rej_patches[no_deforestation], rej_out_path + 'no_deforestation/' 'tile_' + str(num_tile) + '.npy')
+        #save_npy_array(rej_patches_ref[no_deforestation], rej_out_path + 'no_deforestation_ref.npy')
 
         patches_out.append(patches_img)
         label_out.append(patch_ref)
@@ -530,6 +555,15 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, stride, config):
     patches_out = np.concatenate(patches_out)
     label_out = np.concatenate(label_out)
     return patches_out, label_out
+
+
+def save_npy_array(np_array, out_path):
+    if len(np_array) != 0:
+        np.save(out_path, np_array)
+    else:
+        print('Empty array')
+        return
+
 
 
 def filter_outliers(img, bins=1000000, bth=0.001, uth=0.999, mask=[0]):
