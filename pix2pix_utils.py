@@ -13,6 +13,7 @@ config = yaml.load(stream)
 IMG_WIDTH = config['image_width']
 IMG_HEIGHT = config['image_height'] 
 NUM_CHANNELS = config['output_channels'] # NUMERO DE CANAIS DE CADA IMAGEM (T1, T2, MASCARA)
+BINARY_MASK = config['binary_mask']
 
 
 def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
@@ -44,6 +45,10 @@ def load_npy(npy_file):
   t1_image = image[:,:w, :]
   t2_image = image[:,w:2*w,:]
   mask_image = image[:,2*w:,:]
+
+  if BINARY_MASK:
+    mask_image[mask_image == 255] = 127.5
+
   input_image = np.concatenate((t1_image, mask_image), axis=-1) #  t1 + mascara
   real_image = t2_image
   input_image = tf.cast(input_image, tf.float32)

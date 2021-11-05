@@ -69,6 +69,7 @@ lr: 0.0002 # initial learning rate for Adam
 beta1: 0.5 # momentum for Adam
 residual_generator: False # use residual blocks instead of skip connections
 synthetic_masks_path: 'trained_pix2pix_input_mode_1/'
+binary_mask: False
 
 # TRAINING PARAMETERS - UNET
 synthetic_data_path: '/pix2pix/28_10_2021_01_11_16/synthetic_data_random/'
