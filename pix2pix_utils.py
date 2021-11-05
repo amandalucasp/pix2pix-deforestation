@@ -52,8 +52,8 @@ def load_npy(npy_file):
 
 
 def resize(input_image, real_image, height, width):
-  input_image = tf.image.resize(input_image, [height, width], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
-  real_image = tf.image.resize(real_image, [height, width], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+  input_image = tf.image.resize(input_image, [height, width], method=tf.image.ResizeMethod.AREA)
+  real_image = tf.image.resize(real_image, [height, width], method=tf.image.ResizeMethod.AREA)
   return input_image, real_image
 
 
@@ -113,7 +113,8 @@ def downsample(filters, size, apply_batchnorm=True, padding_mode='same'):
       tf.keras.layers.Conv2D(filters, size, strides=2, padding=padding_mode,
                              kernel_initializer=initializer, use_bias=False))
   if apply_batchnorm:
-    result.add(tf.keras.layers.BatchNormalization())
+    result.add(tf.keras.layers.BatchNormalization(momentum=0.8,
+                                                  gamma_initializer=tf.random_normal_initializer(1.0, 0.02)))
   result.add(tf.keras.layers.LeakyReLU(alpha=0.2))
   return result
 
@@ -126,7 +127,8 @@ def upsample(filters, size, apply_dropout=False):
                                     padding='same',
                                     kernel_initializer=initializer,
                                     use_bias=False))
-  result.add(tf.keras.layers.BatchNormalization())
+  result.add(tf.keras.layers.BatchNormalization(momentum=0.8,
+                                                  gamma_initializer=tf.random_normal_initializer(1.0, 0.02)))
   if apply_dropout:
       result.add(tf.keras.layers.Dropout(0.5))
   result.add(tf.keras.layers.ReLU())

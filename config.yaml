@@ -15,6 +15,7 @@ save_patches: True # if False, save only image pairs (expected input from pix2pi
 save_tiles: True # save testing tiles 
 save_image_pairs: True
 synthetic_input_mode: 1
+max_input_samples: 10000 # maximo de itens a serem gerados para entrada do pix2pix treinado
 # 0: mascaras originais
 # 1: patches sem desmatamento + masks de desmatamento passado -> pixels de desm. passado >>> novo
 # 2: patches com desmatamento passado -> aplico dilate e chamo a dilatacao de desmatamento novo
@@ -50,9 +51,9 @@ minipatch_size: 32
 
 # TRAINING PARAMETERS - PIX2PIX
 # training_name: 'v0-128'
-data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false'
+data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/'
 # data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/v0_256/samples_change_detection_true_two_classes_false'
-training_steps: 250000
+training_steps: 350000
 checkpoint_steps: 25000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
 lambda: 100 # weight on L1 term
@@ -61,11 +62,12 @@ image_width: 128
 image_height: 128
 output_channels: 3
 #checkpoint_folder: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/27_10_2021_12_00_41/training_checkpoints' # used when running with --inference flag
-# buffer_size: 100
-ngf: 64 # number of generator filters in first conv layer
-ndf: 64 # number of discriminator filters in first conv layer
+# buffer_size: 50
+ngf: 32 # number of generator filters in first conv layer
+ndf: 32 # number of discriminator filters in first conv layer
 lr: 0.0002 # initial learning rate for Adam
 beta1: 0.5 # momentum for Adam
+synthetic_masks_path: 'trained_pix2pix_input_mode_1/'
 
 # TRAINING PARAMETERS - UNET
 synthetic_data_path: '/pix2pix/28_10_2021_01_11_16/synthetic_data_random/'

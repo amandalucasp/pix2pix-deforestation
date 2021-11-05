@@ -42,6 +42,11 @@ ndf = config['ndf']
 
 npy_path = pathlib.Path(config['data_path'])
 
+config['synthetic_masks_path'] = config['data_path'] + config['synthetic_masks_path']
+synthetic_masks_path = pathlib.Path(config['synthetic_masks_path'])
+
+print(config)
+
 checkpoint_dir = output_folder + '/training_checkpoints'
 log_dir= output_folder + "/logs/"
 out_dir = output_folder + "/output_images/"
@@ -181,9 +186,8 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64)
   # layer_5
   down4_pad = tf.keras.layers.ZeroPadding2D()(leaky_relu)  # (batch_size, 33, 33, 512) 17, 17, 256
   last = tf.keras.layers.Conv2D(1, 4, strides=1,
-                                kernel_initializer=initializer,
-                                activation='sigmoid')(down4_pad)  # (batch_size, 30, 30, 1) 14, 14, 1
-
+                                kernel_initializer=initializer)(down4_pad)
+  
   return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
 discriminator = Discriminator(input_shape, target_shape, ndf)
@@ -269,7 +273,7 @@ def plot_imgs(generator, test_ds, out_dir, counter):
 
 def fit(train_ds, test_ds, config):
   # example_input, example_target = next(iter(test_ds.take(1)))
-  start = time.time()
+  start_time = time.time()
   steps = config['training_steps']
   counter = 0
   for step, (input_image, target) in train_ds.repeat().take(steps).enumerate():
@@ -289,6 +293,7 @@ def fit(train_ds, test_ds, config):
 
     if (step + 1) % config['checkpoint_steps'] == 0:
       checkpoint.save(file_prefix=checkpoint_prefix)
+  print(f'[*] Training took a total of: {time.time()-start_time:.2f} secs.')
 
 
 if args.train:
@@ -305,7 +310,7 @@ if args.train:
     save_synthetic_img(inp, prediction, synthetic_path, str(counter))
     counter+=1
 
-  tr_input_files = glob.glob(str(npy_path / 'trained_pix2pix_input/pairs/*.npy'))
+  tr_input_files = glob.glob(str( synthetic_masks_path / 'pairs/*.npy'))
   pix2pix_input_ds = tf.data.Dataset.from_tensor_slices(tr_input_files)
   pix2pix_input_ds = pix2pix_input_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
   pix2pix_input_ds = pix2pix_input_ds.map(lambda img, label: set_shapes(img, label, input_shape, target_shape))
