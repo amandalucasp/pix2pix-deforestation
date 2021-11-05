@@ -67,6 +67,7 @@ ngf: 32 # number of generator filters in first conv layer
 ndf: 32 # number of discriminator filters in first conv layer
 lr: 0.0002 # initial learning rate for Adam
 beta1: 0.5 # momentum for Adam
+residual_generator: False # use residual blocks instead of skip connections
 synthetic_masks_path: 'trained_pix2pix_input_mode_1/'
 
 # TRAINING PARAMETERS - UNET

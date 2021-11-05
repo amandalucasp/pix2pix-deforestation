@@ -135,6 +135,33 @@ def upsample(filters, size, apply_dropout=False):
   return result
 
 
+def residual_block(filters, size, apply_batchnorm=True, apply_dropout=True, padding_mode='same'):
+    # x = encoder_block(input_x, filters, strides=1, name=name+'rba')
+    # x = Dropout(0.5, name=name+'drop')(x, training=True)
+    # x = encoder_block(x, filters,  strides=1, activation='linear', name=name+'rbb')
+    # x = Add(name=name+'concatenate')([x, input_x])
+    result = tf.keras.Sequential()
+    # encoder 1
+    initializer = tf.random_normal_initializer(0., 0.02)
+    result.add(
+      tf.keras.layers.Conv2D(filters, size, strides=1, padding=padding_mode,
+                             kernel_initializer=initializer, use_bias=False))
+    if apply_batchnorm:
+      result.add(tf.keras.layers.BatchNormalization(momentum=0.8,
+                                                  gamma_initializer=tf.random_normal_initializer(1.0, 0.02)))
+    result.add(tf.keras.layers.ReLU())
+    # dropout
+    result.add(tf.keras.layers.Dropout(0.5))
+    # encoder 2
+    result.add(
+      tf.keras.layers.Conv2D(filters, size, strides=1, padding=padding_mode,
+                             kernel_initializer=initializer, use_bias=False))
+    if apply_batchnorm:
+      result.add(tf.keras.layers.BatchNormalization(momentum=0.8,
+                                                  gamma_initializer=tf.random_normal_initializer(1.0, 0.02)))
+    return result
+
+
 def generate_images(model, test_input, tar, filename=None):
   prediction = model(test_input, training=True)
   if filename:

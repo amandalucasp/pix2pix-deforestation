@@ -155,7 +155,7 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=9):
   return tf.keras.Model(inputs=inputs, outputs=x)
 
 
-generator = Generator(input_shape, ngf)
+generator = Generator(input_shape, ngf, config['residual_generator'])
 gen_output = generator(inp[tf.newaxis, ...], training=False)
 fig = plt.figure()
 plt.imshow(gen_output[0, ...])
