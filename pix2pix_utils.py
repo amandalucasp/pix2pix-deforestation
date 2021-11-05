@@ -47,7 +47,7 @@ def load_npy(npy_file):
   mask_image = image[:,2*w:,:]
 
   if BINARY_MASK:
-    mask_image[mask_image == 255] = 127.5
+    mask_image[mask_image == 255] = 0
 
   input_image = np.concatenate((t1_image, mask_image), axis=-1) #  t1 + mascara
   real_image = t2_image
