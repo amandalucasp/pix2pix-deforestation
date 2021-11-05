@@ -87,7 +87,7 @@ print(test_ds.element_spec)
 print(test_ds)
 
 
-def Generator(input_shape=[256, 256, 3], ngf=64):
+def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=9):
   inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
 
   down_stack = [
@@ -125,18 +125,30 @@ def Generator(input_shape=[256, 256, 3], ngf=64):
     down_stack = down_stack[:-1]
     up_stack = up_stack[1:]
 
-  # Downsampling through the model
-  skips = []
-  for down in down_stack:
-    x = down(x)
-    skips.append(x)
+  if residual:
 
-  skips = reversed(skips[:-1]) # last layer is connected directly to the decoders
+    residual_b = residual_block(ngf * 8, 4)
+    for down in down_stack:
+      x = down(x)
+    for i in range(n_residuals):
+      x = residual_b(x)
+    for up in up_stack:
+      x = up(x)
 
-  # Upsampling and establishing the skip connections
-  for up, skip in zip(up_stack, skips):
-    x = up(x)
-    x = tf.keras.layers.Concatenate()([x, skip])
+  else:
+
+    # Downsampling through the model
+    skips = []
+    for down in down_stack:
+      x = down(x)
+      skips.append(x)
+
+    skips = reversed(skips[:-1]) # last layer is connected directly to the decoders
+
+    # Upsampling and establishing the skip connections
+    for up, skip in zip(up_stack, skips):
+      x = up(x)
+      x = tf.keras.layers.Concatenate()([x, skip])
 
   x = last(x)
 
