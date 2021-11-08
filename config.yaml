@@ -62,12 +62,13 @@ image_width: 128
 image_height: 128
 output_channels: 3
 #checkpoint_folder: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/27_10_2021_12_00_41/training_checkpoints' # used when running with --inference flag
-# buffer_size: 50
+# buffer_size: 100
 ngf: 32 # number of generator filters in first conv layer
 ndf: 32 # number of discriminator filters in first conv layer
 lr: 0.0002 # initial learning rate for Adam
 beta1: 0.5 # momentum for Adam
 residual_generator: False # use residual blocks instead of skip connections
+number_residuals: 3
 synthetic_masks_path: 'trained_pix2pix_input_mode_1/'
 binary_mask: False
 

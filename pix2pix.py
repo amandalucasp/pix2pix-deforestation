@@ -87,7 +87,7 @@ print(test_ds.element_spec)
 print(test_ds)
 
 
-def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=9):
+def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3):
   inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
 
   down_stack = [
@@ -127,11 +127,16 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=9):
 
   if residual:
 
-    residual_b = residual_block(ngf * 8, 4)
+    down_stack = down_stack[:-n_residuals]
+    up_stack = up_stack[n_residuals:]
+    n_filters = down_stack[-1](x).shape 
+    residual_b = residual_block(n_filters, 4)
     for down in down_stack:
       x = down(x)
     for i in range(n_residuals):
+      x_old = x
       x = residual_b(x)
+      x = tf.keras.layers.Add()([x, x_old])
     for up in up_stack:
       x = up(x)
 
@@ -155,7 +160,7 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=9):
   return tf.keras.Model(inputs=inputs, outputs=x)
 
 
-generator = Generator(input_shape, ngf, config['residual_generator'])
+generator = Generator(input_shape, ngf, config['residual_generator'], config['number_residuals'])
 gen_output = generator(inp[tf.newaxis, ...], training=False)
 fig = plt.figure()
 plt.imshow(gen_output[0, ...])
