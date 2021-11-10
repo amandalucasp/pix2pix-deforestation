@@ -7,6 +7,9 @@ import yaml
 import cv2
 import os
 
+import warnings
+warnings.filterwarnings( "ignore", module = "matplotlib\..*" )
+
 stream = open('./config.yaml')
 config = yaml.load(stream)
 

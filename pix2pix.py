@@ -12,6 +12,9 @@ import time
 import cv2
 import os
 
+import warnings
+warnings.filterwarnings( "ignore", module = "matplotlib\..*" )
+
 from pix2pix_utils import *
 
 ap = argparse.ArgumentParser()
@@ -87,7 +90,7 @@ print(test_ds.element_spec)
 print(test_ds)
 
 
-def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3):
+def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, drop_blocs=0):
   inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
 
   down_stack = [
@@ -127,10 +130,12 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3):
 
   if residual:
 
-    down_stack = down_stack[:-n_residuals]
-    up_stack = up_stack[n_residuals:]
-    n_filters = down_stack[-1](x).shape 
-    residual_b = residual_block(n_filters, 4)
+    if drop_blocs > 0:
+      down_stack = down_stack[:-drop_blocs]
+      up_stack = up_stack[drop_blocs:]
+    nb = min(2**(7-drop_blocs),8)
+    print('nb:', nb)
+    residual_b = residual_block(ngf * nb, 4)
     for down in down_stack:
       x = down(x)
     for i in range(n_residuals):
@@ -160,7 +165,8 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3):
   return tf.keras.Model(inputs=inputs, outputs=x)
 
 
-generator = Generator(input_shape, ngf, config['residual_generator'], config['number_residuals'])
+generator = Generator(input_shape, ngf, config['residual_generator'],
+                      config['number_residuals'], config['drop_blocs'])
 gen_output = generator(inp[tf.newaxis, ...], training=False)
 fig = plt.figure()
 plt.imshow(gen_output[0, ...])

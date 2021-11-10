@@ -68,12 +68,13 @@ ndf: 32 # number of discriminator filters in first conv layer
 lr: 0.0002 # initial learning rate for Adam
 beta1: 0.5 # momentum for Adam
 residual_generator: False # use residual blocks instead of skip connections
-number_residuals: 3
+number_residuals: 9 
+drop_blocs: 3 # blocks to be dropped in encoder/decoder; maximum supported (although not recommended): 7
 synthetic_masks_path: 'trained_pix2pix_input_mode_1/'
 binary_mask: False
 
 # TRAINING PARAMETERS - UNET
-synthetic_data_path: '/pix2pix/28_10_2021_01_11_16/synthetic_data_random/'
+#synthetic_data_path: '/pix2pix/28_10_2021_01_11_16/synthetic_data_random/'
 training_output_path: '/unet-results/'
 input_channels: 6
 epochs_unet: 100
