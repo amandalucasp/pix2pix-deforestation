@@ -353,7 +353,7 @@ os.makedirs(output_folder + '/checkpoints', exist_ok=True)
 
 adam = Adam(lr = 0.0001 , beta_1=0.9)
 # 0: forest, 1: new deforestation, 2: old deforestation
-weights = [0.1, 0.6, 0.0] # desconsidero a classe 2 nesse problema
+weights = [0.2, 0.8, 0.0] # desconsidero a classe 2 nesse problema
 print("[*] Weights for CE:", weights)
 loss = weighted_categorical_crossentropy(weights)
 
