@@ -1,5 +1,7 @@
+
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib import pyplot as plt
+from skimage import img_as_ubyte
 import tensorflow as tf
 import numpy as np
 import imageio
@@ -11,7 +13,7 @@ import warnings
 warnings.filterwarnings( "ignore", module = "matplotlib\..*" )
 
 stream = open('./config.yaml')
-config = yaml.load(stream)
+config = yaml.load(stream, Loader=yaml.FullLoader)
 
 IMG_WIDTH = config['image_width']
 IMG_HEIGHT = config['image_height'] 
@@ -35,6 +37,8 @@ def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
     combined[:,w:w*2,:] = mask
     combined[:,2*w:,:] = t2_img
 
+    combined = (combined - np.min(combined))/np.ptp(combined)
+    combined = img_as_ubyte(combined)
     imageio.imwrite(saving_path + '/combined/' + filename + '.png', cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
     np.save(saving_path + '/imgs/' + filename + '.npy', t1_t2)
     np.save(saving_path + '/masks/' + filename + '.npy', mask)
@@ -114,11 +118,16 @@ def set_shapes(img, label, img_shape, label_shape):
   return img, label
 
 
-def downsample(filters, size, apply_batchnorm=True, padding_mode='same'):
+def downsample(filters, size, apply_batchnorm=True, strides=2, padding_mode='same', sn=False):
   initializer = tf.random_normal_initializer(0., 0.02)
   result = tf.keras.Sequential()
-  result.add(
-      tf.keras.layers.Conv2D(filters, size, strides=2, padding=padding_mode,
+  if sn:
+    result.add(
+      tf.keras.layers.ConvSN2D(filters, size, strides=strides, padding=padding_mode,
+                             kernel_initializer=initializer, use_bias=False))
+  else:
+    result.add(
+        tf.keras.layers.Conv2D(filters, size, strides=strides, padding=padding_mode,
                              kernel_initializer=initializer, use_bias=False))
   if apply_batchnorm:
     result.add(tf.keras.layers.BatchNormalization(momentum=0.8,

@@ -6,8 +6,8 @@ change_detection: True
 # two_classes_problem - if True, uses a binary mask. if False, uses a 3-classes mask.
 two_classes_problem: False 
 # tiles usados para treinamento e validacao
-tiles_tr: [1, 3, 5, 7, 8, 10, 11, 13, 14, 16, 18, 20, 4, 6, 19] # 
-tiles_val: [2, 9, 12]
+tiles_tr: [1,3,5,8,11,13,14,20]
+tiles_val: [6,19]
 # stride is set to 0.5*patch_size
 patch_size: 128
 overlap: 0.7
@@ -20,16 +20,16 @@ max_input_samples: 10000 # maximo de itens a serem gerados para entrada do pix2p
 # 1: patches sem desmatamento + masks de desmatamento passado -> pixels de desm. passado >>> novo
 # 2: patches com desmatamento passado -> aplico dilate e chamo a dilatacao de desmatamento novo
 # 3: patches com as 3 classes -> aplico dilate no desmatamento novo
-goal_percentage: 3 # minimum percentage when using dilation
+goal_percentage: 2 # minimum percentage when using dilation
 # minimum NEW deforestation required per patch (new deforestation - class 1)
 # 0: forest, 1: new deforestation, 2: old deforestation
-min_percentage: 3
+min_percentage: 2
 # path to images
 root_path: '../Sentinel2/' 
 # path to save patches
 output_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128'
 # limite utilizado das imagens de entrada -> image is (17729, 9202)
-lim_x: 17700 # 1000
+lim_x: 17700 # 10000
 lim_y: 9200 # 7000
 # tipo de normalizacao utilizada. ps.: o codigo do pix2pix ja faz a normalizacao entre [0,1]
 # 0: MinMax(0,255), 1: Standard, 2: MinMax(0,1), 3: MinMax(-1,1)
@@ -53,32 +53,33 @@ minipatch_size: 32
 # training_name: 'v0-128'
 data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/'
 # data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/v0_256/samples_change_detection_true_two_classes_false'
-training_steps: 350000
-checkpoint_steps: 25000 # interval to save checkpoint
+training_steps: 300000
+checkpoint_steps: 30000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
 lambda: 100 # weight on L1 term
 gan_weight: 1.0 # weight on GAN term
 image_width: 128
 image_height: 128
 output_channels: 3
-#checkpoint_folder: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/27_10_2021_12_00_41/training_checkpoints' # used when running with --inference flag
+checkpoint_folder: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/04_11_2021_01_40_53/training_checkpoints' # used when running with --inference flag
 # buffer_size: 100
-ngf: 32 # number of generator filters in first conv layer
-ndf: 32 # number of discriminator filters in first conv layer
+ngf: 64 # number of generator filters in first conv layer
+ndf: 64 # number of discriminator filters in first conv layer
 lr: 0.0002 # initial learning rate for Adam
 beta1: 0.5 # momentum for Adam
 residual_generator: False # use residual blocks instead of skip connections
-number_residuals: 9 
+number_residuals: 3 
 drop_blocs: 3 # blocks to be dropped in encoder/decoder; maximum supported (although not recommended): 7
 synthetic_masks_path: 'trained_pix2pix_input_mode_1/'
 binary_mask: False
 
 # TRAINING PARAMETERS - UNET
-#synthetic_data_path: '/pix2pix/28_10_2021_01_11_16/synthetic_data_random/'
+unet_data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128_baseline_unet/change_detection_true_two_classes_false/'
+synthetic_data_path: '' #'/pix2pix/10_11_2021_21_24_43_inference_04_11_2021_01_40_53/synthetic_data_random/'
 training_output_path: '/unet-results/'
 input_channels: 6
-epochs_unet: 100
+epochs_unet: 150
 batch_size_unet: 32
 nb_filters: [32, 64, 128]
 times: 5
-patience_value: 10
+patience_value: 20

@@ -25,10 +25,11 @@ args = ap.parse_args()
 print(tf.executing_eagerly())
 
 stream = open('./config.yaml')
-config = yaml.load(stream)
+config = yaml.load(stream, Loader=yaml.FullLoader)
 
 time_string = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
-# output_folder = config['training_name'] + '/' + time_string
+if args.inference:
+  time_string = time_string + '_inference'
 output_folder = config['data_path'] + '/pix2pix/' + time_string
 os.makedirs(output_folder)
 shutil.copy('./config.yaml', output_folder)
@@ -88,6 +89,44 @@ test_ds = test_ds.batch(BATCH_SIZE)
 print('[*] Test Dataset:')
 print(test_ds.element_spec)
 print(test_ds)
+
+
+def resGenerator(input_shape=[256, 256, 3], ngf=64, n_residuals=3):
+  inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
+
+  down_stack = [
+    downsample(ngf, 7, apply_batchnorm=False, strides=1),
+    downsample(ngf * 2, 3),
+    downsample(ngf * 4, 3)
+  ]
+
+  up_stack = [
+    upsample(ngf * 2, 3), 
+    upsample(ngf, 3)
+  ]
+
+  residual_b = residual_block(ngf * 4, 4)
+
+  initializer = tf.random_normal_initializer(0., 0.02)
+  last = tf.keras.layers.Conv2D(OUTPUT_CHANNELS, 7,
+                                         strides=2,
+                                         padding='same',
+                                         kernel_initializer=initializer,
+                                         activation='tanh')
+
+  x = inputs
+  for down in down_stack:
+    x = down(x)
+  for i in range(n_residuals):
+    x_old = x
+    x = residual_b(x)
+    x = tf.keras.layers.Add()([x, x_old])
+  for up in up_stack:
+    x = up(x)
+
+  x = last(x)
+
+  return tf.keras.Model(inputs=inputs, outputs=x)
 
 
 def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, drop_blocs=0):
@@ -165,8 +204,12 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, 
   return tf.keras.Model(inputs=inputs, outputs=x)
 
 
-generator = Generator(input_shape, ngf, config['residual_generator'],
+if config['residual_generator']:
+  generator = resGenerator(input_shape, ngf, config['number_residuals'])
+else:
+  generator = Generator(input_shape, ngf, config['residual_generator'],
                       config['number_residuals'], config['drop_blocs'])
+print(generator.summary())
 gen_output = generator(inp[tf.newaxis, ...], training=False)
 fig = plt.figure()
 plt.imshow(gen_output[0, ...])
@@ -182,6 +225,27 @@ def generator_loss(disc_generated_output, gen_output, target):
   return total_gen_loss, gan_loss, l1_loss
 
 
+def resDiscriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64):
+  initializer = tf.random_normal_initializer(0., 0.02)
+
+  inp = tf.keras.layers.Input(shape=input_shape, name='input_image')
+  tar = tf.keras.layers.Input(shape=target_shape, name='target_image')
+  x = tf.keras.layers.concatenate([inp, tar], axis=3)
+
+  down1 = downsample(ndf, 4, apply_batchnorm=False, strides=2, padding_mode='same', sn=True)(x) 
+  down2 = downsample(ndf * 2, 4, apply_batchnorm=False, strides=2, padding_mode='same', sn=True)(down1)
+  down3 = downsample(ndf * 4, 4, apply_batchnorm=False, strides=2, padding_mode='same', sn=True)(down2)
+
+  x = tf.keras.layers.ZeroPadding2D()(down3)
+  down4 = downsample(ndf * 8, 4, apply_batchnorm=False, strides = 1, padding_mode='valid', sn=True)(x)
+  x = tf.keras.layers.ZeroPadding2D()(down4)
+  
+  logits = ConvSN2D(1, (4,4), padding='valid', kernel_initializer=initializer)(x)
+  last = Activation('sigmoid')(logits)
+
+  return tf.keras.Model(inputs=[inp, tar], outputs=[last, logits])
+
+
 def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64):
   initializer = tf.random_normal_initializer(0., 0.02)
 
@@ -192,7 +256,7 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64)
 
   # layer_1
   x = tf.keras.layers.ZeroPadding2D()(x)
-  down1 = downsample(ndf, 4, apply_batchnorm=False, padding_mode='valid')(x)  # (batch_size, 128, 128, 64) 64, 64, 32
+  down1 = downsample(ndf, 4, apply_batchnorm=False, strides=2, padding_mode='valid')(x)  # (batch_size, 128, 128, 64) 64, 64, 32
   # layer_2
   down1_pad = tf.keras.layers.ZeroPadding2D()(down1)
   down2 = downsample(ndf * 2, 4, padding_mode='valid')(down1_pad)  # (batch_size, 64, 64, 128) 32, 32, 64
@@ -213,7 +277,12 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64)
   
   return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
-discriminator = Discriminator(input_shape, target_shape, ndf)
+if config['residual_generator']:
+  discriminator = resDiscriminator(input_shape, target_shape, ndf)
+else:
+  discriminator = Discriminator(input_shape, target_shape, ndf)
+print(discriminator.summary())
+
 disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
 fig = plt.figure()
 plt.imshow(disc_out[0, ..., -1], vmin=-20, vmax=20, cmap='RdBu_r')
@@ -240,9 +309,56 @@ for example_input, example_target in test_ds.take(1):
   generate_images(generator, example_input, example_target, output_folder + '/sample.png')
 
 
+def cross_entropy_loss(labels, logits):
+    loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels))
+    return loss
+
+def lsgan_loss(labels, logits):
+        loss = tf.reduce_mean(tf.squared_difference(logits, labels))
+        return loss 
+    
+def l1_loss(a, b):
+    loss = tf.reduce_mean(tf.abs(a - b))
+    return loss
+
 os.makedirs(out_dir, exist_ok=True)
 summary_writer = tf.summary.create_file_writer(
   log_dir + "fit/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+
+
+@tf.function
+def res_train_step(input_image, target, step):
+  with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+    gen_output = generator(input_image, training=True) 
+    disc_real_output, disc_real_logits = discriminator([input_image, target], training=True)
+    disc_generated_output, disc_fake_logits = discriminator([input_image, gen_output], training=True)
+    # discriminator loss
+    d_loss_real = lsgan_loss(tf.ones_like(disc_real_output), disc_real_logits)
+    d_loss_fake = lsgan_loss(tf.zeros_like(disc_real_output), disc_fake_logits)
+    disc_loss = (d_loss_real + d_loss_fake) / 2.0
+    # reconstruction loss
+    reco_loss = LAMBDA * l1_loss(input_image, gen_output)
+    # generator loss
+    g_loss_ = lsgan_loss(tf.ones_like(disc_generated_output), disc_fake_logits)
+    gen_total_loss =  g_loss_ + reco_loss
+
+  generator_gradients = gen_tape.gradient(gen_total_loss,
+                                          generator.trainable_variables)
+  discriminator_gradients = disc_tape.gradient(disc_loss,
+                                               discriminator.trainable_variables)
+
+  generator_optimizer.apply_gradients(zip(generator_gradients,
+                                          generator.trainable_variables))
+  discriminator_optimizer.apply_gradients(zip(discriminator_gradients,
+                                              discriminator.trainable_variables))
+
+  with summary_writer.as_default():
+    tf.summary.scalar('gen_total_loss', gen_total_loss, step=step//1000)
+    tf.summary.scalar('gen_gan_loss', gen_gan_loss, step=step//1000)
+    tf.summary.scalar('gen_l1_loss', gen_l1_loss, step=step//1000)
+    tf.summary.scalar('disc_loss', disc_loss, step=step//1000)
+  
+  return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss
 
 @tf.function
 def train_step(input_image, target, step):
@@ -270,6 +386,8 @@ def train_step(input_image, target, step):
     tf.summary.scalar('gen_gan_loss', gen_gan_loss, step=step//1000)
     tf.summary.scalar('gen_l1_loss', gen_l1_loss, step=step//1000)
     tf.summary.scalar('disc_loss', disc_loss, step=step//1000)
+
+  return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss
 
 
 def plot_imgs(generator, test_ds, out_dir, counter):
@@ -303,12 +421,19 @@ def fit(train_ds, test_ds, config):
     if (step) % 1000 == 0:
       if step != 0:
         print(f'Time taken for 1000 steps: {time.time()-start:.2f} sec\n')
+        print('gen_total_loss:', gen_total_loss)
+        print('gen_gan_loss:', gen_gan_loss)
+        print('gen_l1_loss:', gen_l1_loss)
+        print('disc_loss:', disc_loss)
       start = time.time()
       plot_imgs(generator, test_ds, out_dir, counter)
       counter +=1000
       print(f"Step: {step//1000}k")
 
-    train_step(input_image, target, step)
+    if config['residual_generator']:
+      gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = res_train_step(input_image, target, step)
+    else:
+      gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = train_step(input_image, target, step)
 
     # Training step
     if (step+1) % 10 == 0:
@@ -334,6 +459,9 @@ if args.train:
     counter+=1
 
   tr_input_files = glob.glob(str( synthetic_masks_path / 'pairs/*.npy'))
+  if len(tr_input_files) > config['max_input_samples']:
+    tr_input_files = tr_input_files[:config['max_input_samples']]
+    print('Using the first', str(config['max_input_samples']), 'pairs.')
   pix2pix_input_ds = tf.data.Dataset.from_tensor_slices(tr_input_files)
   pix2pix_input_ds = pix2pix_input_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
   pix2pix_input_ds = pix2pix_input_ds.map(lambda img, label: set_shapes(img, label, input_shape, target_shape))
@@ -353,9 +481,9 @@ if args.inference:
   # checkpoint_prefix = os.path.join(config['checkpoint_folder'], "ckpt")
   checkpoint.restore(tf.train.latest_checkpoint(config['checkpoint_folder']))
 
-  tr_input_files = glob.glob(str(npy_path / 'trained_pix2pix_input/pairs/*.npy'))
+  tr_input_files = glob.glob(str( synthetic_masks_path / 'pairs/*.npy'))
   pix2pix_input_ds = tf.data.Dataset.from_tensor_slices(tr_input_files)
-  pix2pix_input_ds = pixpix2pix_input_ds2pix_input.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
+  pix2pix_input_ds = pix2pix_input_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
   pix2pix_input_ds = pix2pix_input_ds.map(lambda img, label: set_shapes(img, label, input_shape, target_shape))
   pix2pix_input_ds = pix2pix_input_ds.batch(BATCH_SIZE)
 
@@ -364,6 +492,7 @@ if args.inference:
 
   counter = 0
   for inp, tar in pix2pix_input_ds:
+    print(inp.shape, inp[0].shape) # ver de tirar esse [0]
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
-    save_synthetic_img(inp, prediction, synthetic_path, str(counter))
+    save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
     counter+=1

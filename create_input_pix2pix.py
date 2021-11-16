@@ -32,6 +32,11 @@ list_imgs = glob.glob(rej_out_path + '*_img.npy')
 print('[*] Reading files...')
 rej_pairs, rej_pairs_ref = load_npy_files(list_imgs)
 
+if len(rej_pairs) > config['max_input_samples']:
+    rej_pairs = rej_pairs[:config['max_input_samples']]
+    rej_pairs_ref = rej_pairs_ref[:config['max_input_samples']]
+    print('=> Using the first', str(config['max_input_samples']), 'pairs.')
+
 print('[*] Processing masks...')
 final_pairs, final_pairs_ref = process_masks(rej_pairs, rej_pairs_ref, config)
 print('[*] Saving pairs...')
