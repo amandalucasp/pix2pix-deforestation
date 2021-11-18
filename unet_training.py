@@ -43,7 +43,7 @@ number_class = 2 if config['two_classes_problem'] else 3
 stride = int((1 - config['overlap']) * config['patch_size'])
 tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
 
-root_path = config['data_path']
+root_path = config['unet_data_path']
 
 training_dir = '/training_data' #/augmented_dataset' 
 validation_dir = '/validation_data'
@@ -55,10 +55,13 @@ epochs = config['epochs_unet']
 nb_filters = config['nb_filters']
 number_runs = config['times']
 patience_value = config['patience_value']
+type_norm_unet = config['type_norm_unet']
 
 ts = time.time()
 st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
-output_folder = config['training_output_path'] + 'output_' + st + '_patchsize_' + str(patch_size) + '_batchsize_' + str(batch_size) + '_epochs_' + str(epochs) + '_patience_' + str(patience_value)
+output_folder = config['unet_data_path'] + config['training_output_path'] + 'output_' + st + '_patchsize_' + str(patch_size) + '_batchsize_' + str(batch_size) + '_epochs_' + str(epochs) + '_patience_' + str(patience_value)
+if config['synthetic_data_path'] != '':
+  output_folder = output_folder + '_augmented'
 os.makedirs(output_folder, exist_ok = True)
 shutil.copy('./config.yaml', output_folder)
 
@@ -71,6 +74,8 @@ def normalization(image, norm_type = 1):
         scaler = MinMaxScaler(feature_range=(0,1))
     if (norm_type == 3):
         scaler = MinMaxScaler(feature_range=(-1,1))
+    if (norm_type == 4):
+        scaler = MinMaxScaler(feature_range=(0,2))
     scaler = scaler.fit(image_reshaped)
     image_normalized = scaler.fit_transform(image_reshaped)
     image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2])
@@ -211,23 +216,178 @@ def test_model(model, patch_test):
   predicted_class = np.argmax(result, axis=-1)
   return predicted_class
 
-   
-def load_patches(root_path, folder):
+
+# https://github.com/xkumiyu/numpy-data-augmentation/blob/master/process_image.py
+
+
+from skimage.transform import rescale, resize, downscale_local_mean
+
+
+def check_size(size):
+    if type(size) == int:
+        size = (size, size)
+    if type(size) != tuple:
+        raise TypeError('size is int or tuple')
+    return size
+
+
+def resize(image, size):
+    size = check_size(size)
+    image = resize(image, size)
+    return image
+
+
+def random_crop(image, ref, crop_size):
+    crop_size = check_size(crop_size)
+    h, w, _ = image.shape
+    top = np.random.randint(0, h - crop_size[0])
+    left = np.random.randint(0, w - crop_size[1])
+    bottom = top + crop_size[0]
+    right = left + crop_size[1]
+    image = image[top:bottom, left:right, :]
+    ref = ref[top:bottom, left:right, :]
+    return image, ref
+
+
+def data_augmentation(image, ref):
+
+  aug = np.random.randint(2)
+
+  if aug == 1:
+    # random crop
+    concat_image = np.concatenate((image, ref), axis=-1)
+    concat_image = resize(concat_image, IMG_HEIGHT + 30)
+    image, ref = np.split(concat_image, axis=-1)
+    image, ref = random_crop(image, ref)
+  if aug == 2:
+    # rotation
+    image = np.rot90(image)
+    ref = np.rot90(ref)
+
+  return image, ref
+
+
+def load_patches(root_path, folder, from_pix2pix=False):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
   img_files = os.listdir(imgs_dir)
+  np.save(root_path + '/img_files.npy', img_files)
   patches = []
   patches_ref = []
-  for i in range(len(img_files)):
-    if i%100==0:
-      print('Loaded {} images'.format(i))
+
+  selected_pos = np.arange(len(img_files))
+
+  if from_pix2pix and len(img_files) > 5000:
+    print('[*]Loading input from pix2pix.', from_pix2pix)
+    np.random.seed(2020)
+    selected_pos = np.random.choice(len(img_files), 5000)
+
+  print('Some of the randomly chosen samples:', selected_pos[0:20])
+
+  for i in selected_pos:
     img_path = imgs_dir + img_files[i]
     mask_path = masks_dir + img_files[i]
     img = np.load(img_path)
-    img = normalization(img, norm_type = 3) # normaliza entre -1 e +1
+    img = normalization(img, norm_type = type_norm_unet)
+    mask = np.load(mask_path)
+    if from_pix2pix: # todo consertar a parada na saida do pix2pixutils pra nao precisar disso aqui
+      mask = to_unet_format(mask)
+
+    img, mask = data_augmentation(img, ref)
+
     patches.append(img)
-    patches_ref.append(np.load(mask_path))
+    patches_ref.append(mask)
+
   return np.array(patches), np.array(patches_ref)
+
+
+def to_unet_format(mask):
+  # pix2pix is fed a 3-channels mask, but u-net expects a 1-channel mask
+  mask = mask[:,:,0]
+  # print(mask.shape)
+  unique, counts = np.unique(mask, return_counts=True)
+  # print(unique, counts)
+  mask[mask == 1] = 2
+  mask[mask == 0] = 1
+  mask[mask == -1] = 0
+  unique, counts = np.unique(mask, return_counts=True)
+  #print(unique, counts)
+  return mask
+
+
+def resize(image, target, height, width):
+  image = tf.image.resize(image, [height, width], method=tf.image.ResizeMethod.AREA)
+  target = tf.image.resize(target, [height, width], method=tf.image.ResizeMethod.AREA)
+  return image, target
+
+
+def random_crop(image, target, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS=3):
+  temp = target
+  while temp.shape[2] != image.shape[2]: # target tem 1 canal, t1 e t2 tem multiplos.
+    temp = tf.concat([temp, target], axis=-1)
+  stacked_image = tf.stack([image, temp])
+  cropped_image = tf.image.random_crop(stacked_image, size=[2, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS*2])
+  target = cropped_image[1, :, :, 0]
+  target = tf.expand_dims(target, axis=-1)
+  return cropped_image[0], target # image, mask
+
+
+def normalize_(input_image, real_image):   
+  # Normalizing the images to [-1, 1]
+  input_image = (input_image / 127.5) - 1
+  real_image = (real_image / 127.5) - 1
+  return input_image, real_image
+
+
+@tf.function()
+def random_jitter(image, target, NUM_CHANNELS=3):
+  image, target = resize(image, target, (IMG_HEIGHT + 30), (IMG_WIDTH + 30))
+  image, target = random_crop(image, target, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS)
+  if tf.random.uniform(()) > 0.5:
+    image = tf.image.flip_left_right(image)
+    target = tf.image.flip_left_right(target)
+  return image, target
+
+
+def load_npy_train(image, target):
+  image, target = load_npy(image, target)
+  image, target = random_jitter(image, target)
+  image, target = normalize_(image, target)
+  #image = tf.reshape(image, shape=(128, 128, 6))
+  #target = tf.reshape(image, shape=(128, 128, 1))
+  return image, target
+
+
+def load_npy_test(image, target):
+  imag = load_npy(image, target)
+  image, target = resize(image, target, IMG_HEIGHT, IMG_WIDTH)
+  image, target = normalize(image, target)
+  #image = tf.reshape(image, shape=(128, 128, 6))
+  #target = tf.reshape(image, shape=(128, 128, 1))
+  return image, target
+
+
+def load_npy(image, target):
+  image = np.load(image)
+  target = np.load(target)
+  if target.ndim == 3 and target.shape[2] == 3: # 128x128x3 [patches gerados pelo pix2pix]
+    target = target[:,:,0]
+    target[target == 1] = 2
+    target[target == 0] = 1
+    target[target == -1] = 0
+    if target.ndim == 2:
+      target = np.expand_dims(target, axis=-1)
+  if target.ndim == 2: # 128,128 [patches originais]
+    target = np.expand_dims(target, axis=-1)
+  image = tf.cast(image, tf.float32)
+  target = tf.cast(target, tf.float32)
+  return image, target
+
+
+def set_shapes(img, label, img_shape, label_shape):
+  img.set_shape(img_shape)
+  label.set_shape(label_shape)
+  return img, label
 
 
 def load_tiles(root_path, testing_tiles_dir, tiles_ts):
@@ -236,7 +396,7 @@ def load_tiles(root_path, testing_tiles_dir, tiles_ts):
   ref_list = []
   for num_tile in tiles_ts:
     img = np.load(dir_ts + str(num_tile) + '_img.npy')
-    img = normalization(img, norm_type = 3) # normaliza entre -1 e +1
+    img = normalization(img, norm_type = type_norm_unet) # normaliza entre -1 e +1
     ref = np.load(dir_ts + str(num_tile) + '_ref.npy')
     print(img.shape, ref.shape)
     img_list.append(img)
@@ -257,9 +417,9 @@ def pred_reconctruct(h, w, num_patches_x, num_patches_y, patch_size_x, patch_siz
 def matrics_AA_recall(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_, px_area):
     thresholds = thresholds_    
     metrics_all = []
-    
     for thr in thresholds:
-        print(thr)  
+        start_time = time.time()
+        print('threshold:', thr)  
 
         img_reconstructed = np.zeros_like(prob_map).astype(np.int8)
         img_reconstructed[prob_map >= thr] = 1
@@ -293,8 +453,11 @@ def matrics_AA_recall(thresholds_, prob_map, ref_reconstructed, mask_amazon_ts_,
         aa = (TP+FP)/len(ref_final)
         mm = np.hstack((recall_, precision_, aa))
         metrics_all.append(mm)
+        elapsed_time = time.time() - start_time
+        print('elapsed_time:', elapsed_time)
     metrics_ = np.asarray(metrics_all)
     return metrics_
+ 
     
 def complete_nan_values(metrics):
     vec_prec = metrics[:,1]
@@ -309,11 +472,10 @@ def complete_nan_values(metrics):
 
 image_stack, final_mask = get_dataset(config)
 print('[*] Normalizing image array...')
-image_array = normalization(image_stack.copy(), 3) # -1 to +1
+image_array = normalization(image_stack.copy(), type_norm_unet)
 mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5, 4))
 
 print('[*] Creating padded image...')
-time_ts = []
 n_pool = 3
 n_rows = 5
 n_cols = 4
@@ -331,15 +493,70 @@ input_shape=(patch_size_rows,patch_size_cols, c)
 
 # check normalization, maybe apply some map
 print('[*] Loading patches...')
+
 # Training patches
-patches_train, patches_tr_ref = load_patches(root_path, training_dir)
+print('[*]Loading training patches.')
+patches_train, patches_tr_ref = load_patches(root_path, training_dir) # retorna np.array(patches), np.array(patches_ref)
+if config['synthetic_data_path'] != '':
+  synt_data_path = config['synthetic_data_path']
+  patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], '', from_pix2pix=True)
+  print(patches_tr_ref.shape, patches_tr_synt_ref.shape)
+  print(np.unique(patches_tr_ref), np.unique(patches_tr_synt_ref))
+  patches_train = np.concatenate((patches_train, patches_train_synt))
+  patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))
 # Validation patches
+print('[*]Loading validation patches.')
 patches_val, patches_val_ref = load_patches(root_path, validation_dir)
 # Test patches
+print('[*]Loading testing patches.')
 patches_test, patches_test_ref = load_patches(root_path, testing_dir)
+
 # Test tiles
 tiles_test, tiles_test_ref = load_tiles(root_path, testing_tiles_dir, tiles_ts)
 
+'''
+import glob
+
+im_shape = [config['image_width'], config['image_height'], config['input_channels']]
+tar_shape = [config['image_width'], config['image_height'], 1]
+
+print('im_shape:', im_shape)
+print('tar_shape:', tar_shape)
+
+npy_path = pathlib.Path(config['unet_data_path'])
+
+train_images = glob.glob(str(npy_path / 'training_data/imgs/*.npy'))
+train_labels = glob.glob(str(npy_path / 'training_data/masks/*.npy'))
+BUFFER_SIZE = len(train_images)
+train_ds = tf.data.Dataset.from_tensor_slices((train_images, train_labels))
+train_ds = train_ds.map(lambda img, label: tuple(tf.compat.v1.numpy_function(load_npy_train, [img, label], [tf.float32,tf.float32])))
+#train_ds = train_ds.map(lambda img, label: set_shapes(img, label, im_shape, tar_shape))
+train_ds = train_ds.shuffle(BUFFER_SIZE)
+train_ds = train_ds.batch(config['batch_size_unet'])
+
+val_images = glob.glob(str(npy_path / 'validation_data/imgs/*.npy'))
+val_labels = glob.glob(str(npy_path / 'validation_data/masks/*.npy'))
+#BUFFER_SIZE = len(val_images)
+val_ds = tf.data.Dataset.from_tensor_slices((val_images, val_labels))
+val_ds = val_ds.map(lambda img, label: tuple(tf.compat.v1.numpy_function(load_npy_test, [img, label], [tf.float32,tf.float32])))
+#val_ds = val_ds.map(lambda img, label: set_shapes(img, label, im_shape, tar_shape))
+val_ds = val_ds.batch(config['batch_size_unet'])
+
+test_images = glob.glob(str(npy_path / 'testing_data/imgs/*.npy'))
+test_labels = glob.glob(str(npy_path / 'testing_data/masks/*.npy'))
+#BUFFER_SIZE = len(test_images)
+test_ds = tf.data.Dataset.from_tensor_slices((test_images, test_labels))
+test_ds = test_ds.map(lambda img, label: tuple(tf.compat.v1.numpy_function(load_npy_test, [img, label], [tf.float32,tf.float32])))
+#test_ds = test_ds.map(lambda img, label: set_shapes(img, label, im_shape, tar_shape))
+test_ds = test_ds.batch(config['batch_size_unet'])
+
+print('[*] Train Dataset:')
+print(train_ds)
+print('[*] Validation Dataset:')
+print(val_ds)
+print('[*] Test Dataset:')
+print(test_ds)
+'''
 print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.shape))
 print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))
 print("[*] Patches for Testing:", str(patches_test.shape), str(patches_test_ref.shape))
@@ -351,21 +568,52 @@ patches_tr_lb_h = tf.keras.utils.to_categorical(patches_tr_ref, number_class)
 
 os.makedirs(output_folder + '/checkpoints', exist_ok=True)
 
-adam = Adam(lr = 0.0001 , beta_1=0.9)
+adam = Adam(lr = config['lr_unet'] , beta_1=config['beta1_unet'])
 # 0: forest, 1: new deforestation, 2: old deforestation
 weights = [0.2, 0.8, 0.0] # desconsidero a classe 2 nesse problema
 print("[*] Weights for CE:", weights)
 loss = weighted_categorical_crossentropy(weights)
 
-cmap = matplotlib.colors.ListedColormap(['blue', 'olive', 'brown'])
+cmap = matplotlib.colors.ListedColormap(['black', 'gray', 'white'])
+
+time_tr = []
+time_ts = []
+exp = 1
+method = 'unet'
+
+path_exp = output_folder+'experiments/exp'+str(exp)
+path_models = path_exp+'/models'
+path_maps = path_exp+'/pred_maps'
+
+steps_per_epoch = len(patches_train)*3//config['batch_size_unet']
+validation_steps = len(patches_val)*3//config['batch_size_unet']
+epochs = config['epochs_unet']
+
+print('steps_per_epoch:', steps_per_epoch)
+print('validation_steps:', validation_steps)
 
 for run in range(number_runs):
-
+  print('[*] Start training', str(run))
   net = build_unet((patch_size, patch_size, channels), nb_filters, number_class)
   net.summary()
   net.compile(loss = loss, optimizer=adam , metrics=['accuracy'])
 
+  start_training = time.time()
   model, validation_accuracy, training_accuracy = train_model(net, patches_train, patches_tr_lb_h, patches_val, patches_val_lb_h, batch_size, epochs, patience_value)
+  #earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=config['patience_value'], verbose=1, mode='min')
+  #checkpoint = ModelCheckpoint(path_models+ '/' + method +'_'+str(run)+'.h5', monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+  #lr_reduce = ReduceLROnPlateau(factor=0.9, min_delta=0.0001, patience=5, verbose=1)
+  #callbacks_list = [earlystop, checkpoint]
+  #
+  #print('Running fit')
+  #history = net.fit((patches_train, patches_tr_lb_h),
+  #  epochs=epochs,
+  #  steps_per_epoch=steps_per_epoch,
+  #  callbacks=callbacks_list,
+  #  validation_data=(patches_val, patches_val_lb_h),
+  #  validation_steps=validation_steps)
+  end_training = time.time() - start_training
+  time_tr.append(end_training)
   name = 'checkpoints/model_{}_epochs_{}_bsize_{}.h5'.format(run, epochs, batch_size)
   model.save(output_folder + '/' + name)
 
@@ -414,6 +662,8 @@ for run in range(number_runs):
   time_ts.append(end_test)
   del prob_recontructed, model, patches_pred
 
+time_tr_array = np.asarray(time_tr)
+np.save(output_folder+'/metrics_tr.npy', time_tr_array)
 time_ts_array = np.asarray(time_ts)
 np.save(output_folder + '/metrics_ts.npy', time_ts_array)
 
@@ -431,11 +681,12 @@ plt.title('Prediction')
 ax1.imshow(mean_prob, cmap = cmap)
 ax1.axis('off')
 
+final_mask[final_mask == 2] = 0
 ax2 = fig.add_subplot(122)
 plt.title('Reference')
 ax2.imshow(final_mask, cmap = cmap)
 ax2.axis('off')
-fig.savefig('mean_map_and_ref.png')
+fig.savefig(output_folder + '/mean_map_and_ref.png')
 
 mean_prob = mean_prob[:final_mask.shape[0], :final_mask.shape[1]]
 
@@ -451,11 +702,11 @@ ref1 = np.ones_like(final_mask).astype(np.float32)
 ref1 [final_mask == 2] = 0
 TileMask = mask_amazon_ts * ref1
 GTTruePositives = final_mask==1
-Pmax = np.max(mean_prob[GTTruePositives * TileMask ==1])
 
 Npoints = 50
 Pmax = np.max(mean_prob[GTTruePositives * TileMask ==1])
 ProbList = np.linspace(Pmax,0,Npoints)
+
 metrics_ = matrics_AA_recall(ProbList, mean_prob, final_mask, mask_amazon_ts, 625)
 np.save(output_folder+'/acc_metrics.npy',metrics_)
 
@@ -470,6 +721,7 @@ AA = metrics_copy[:,2]
     
 DeltaR = Recall[1:]-Recall[:-1]
 AP = np.sum(Precision[:-1]*DeltaR)
+print(output_folder)
 print('mAP', AP)
 
 # Plot Recall vs. Precision curve
