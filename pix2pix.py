@@ -1,3 +1,4 @@
+#from SpectralNormalizationKeras import ConvSN2D
 from datetime import datetime, timedelta
 from matplotlib import pyplot as plt
 import tensorflow as tf
@@ -43,7 +44,7 @@ LAMBDA = config['lambda']
 GAN_WEIGHT = config['gan_weight']
 ngf = config['ngf']
 ndf = config['ndf']
-
+EPS = 1e-12
 npy_path = pathlib.Path(config['data_path'])
 
 config['synthetic_masks_path'] = config['data_path'] + config['synthetic_masks_path']
@@ -91,42 +92,37 @@ print(test_ds.element_spec)
 print(test_ds)
 
 
-def resGenerator(input_shape=[256, 256, 3], ngf=64, n_residuals=3):
-  inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
+def resGenerator(input_shape=[256, 256, 3], ngf=64, last_act='tanh', n_residuals=9, summary=False, model_file=None, name='gan_g_'):
 
-  down_stack = [
-    downsample(ngf, 7, apply_batchnorm=False, strides=1),
-    downsample(ngf * 2, 3),
-    downsample(ngf * 4, 3)
-  ]
+    init = tf.random_normal_initializer(0., 0.02)
+    n_rows = input_shape[0]
+    n_cols = input_shape[1]
+    in_c_dims = input_shape[2]
+    out_c_dims = input_shape[2]
 
-  up_stack = [
-    upsample(ngf * 2, 3), 
-    upsample(ngf, 3)
-  ]
+    input_shape = (n_rows, n_cols, in_c_dims)
+    input_layer = tf.keras.layers.Input(shape=input_shape, name=name+'_input')
+    
+    x = input_layer
+    #(input_data, n_filters, k_size=3, strides=2, activation='relu', padding='same', SN=False, batchnorm=True, name='None')
+    x = res_encoder_block(x, 1*ngf, k_size=7, strides=1, batchnorm=False, name=name+'_e1')
+    x = res_encoder_block(x, 2*ngf, name=name+'e2') # rows/2, cols/2
+    x = res_encoder_block(x, 4*ngf, name=name+'e3') # rows/4, cols/4
 
-  residual_b = residual_block(ngf * 4, 4)
+    for i in range(n_residuals):
+        x = residual_block(x, n_kernels=4*ngf, name=name+str(i+1)+'_')  # rows/4, cols/4
 
-  initializer = tf.random_normal_initializer(0., 0.02)
-  last = tf.keras.layers.Conv2D(OUTPUT_CHANNELS, 7,
-                                         strides=2,
-                                         padding='same',
-                                         kernel_initializer=initializer,
-                                         activation='tanh')
+    # (input_data, n_filters, k_size=3, strides=2, padding='same', name='None')
+    x = res_decoder_block(x, 2*ngf, name=name+'d1') # rows/2, cols/2            
+    x = res_decoder_block(x, 1*ngf, name=name+'d2') # rows, cols
+    x = tf.keras.layers.Conv2D(OUTPUT_CHANNELS, 7, padding='same',  kernel_initializer=init, name=name+'d_out')(x)   # rows, cols
 
-  x = inputs
-  for down in down_stack:
-    x = down(x)
-  for i in range(n_residuals):
-    x_old = x
-    x = residual_b(x)
-    x = tf.keras.layers.Add()([x, x_old])
-  for up in up_stack:
-    x = up(x)
+    output = tf.keras.layers.Activation(last_act, name=name+last_act)(x)
 
-  x = last(x)
-
-  return tf.keras.Model(inputs=inputs, outputs=x)
+    model = tf.keras.Model(inputs=[input_layer], outputs=[output], name='Generator'+name[-3:])
+    if (summary):
+        model.summary()
+    return model
 
 
 def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, drop_blocs=0):
@@ -205,7 +201,7 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, 
 
 
 if config['residual_generator']:
-  generator = resGenerator(input_shape, ngf, config['number_residuals'])
+  generator = resGenerator(input_shape, ngf)
 else:
   generator = Generator(input_shape, ngf, config['residual_generator'],
                       config['number_residuals'], config['drop_blocs'])
@@ -218,32 +214,31 @@ fig.savefig(output_folder + '/gen_output.png')
 loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
 def generator_loss(disc_generated_output, gen_output, target):
-  gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
-  # gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
+  #gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
+  gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
   l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
   total_gen_loss = (GAN_WEIGHT * gan_loss) + (LAMBDA * l1_loss)
   return total_gen_loss, gan_loss, l1_loss
 
 
-def resDiscriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64):
-  initializer = tf.random_normal_initializer(0., 0.02)
-
+def resDiscriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64, name='d'):
+  init = tf.random_normal_initializer(0., 0.02)
   inp = tf.keras.layers.Input(shape=input_shape, name='input_image')
   tar = tf.keras.layers.Input(shape=target_shape, name='target_image')
-  x = tf.keras.layers.concatenate([inp, tar], axis=3)
-
-  down1 = downsample(ndf, 4, apply_batchnorm=False, strides=2, padding_mode='same', sn=True)(x) 
-  down2 = downsample(ndf * 2, 4, apply_batchnorm=False, strides=2, padding_mode='same', sn=True)(down1)
-  down3 = downsample(ndf * 4, 4, apply_batchnorm=False, strides=2, padding_mode='same', sn=True)(down2)
-
-  x = tf.keras.layers.ZeroPadding2D()(down3)
-  down4 = downsample(ndf * 8, 4, apply_batchnorm=False, strides = 1, padding_mode='valid', sn=True)(x)
-  x = tf.keras.layers.ZeroPadding2D()(down4)
+  d = tf.keras.layers.concatenate([inp, tar], axis=3)
   
-  logits = ConvSN2D(1, (4,4), padding='valid', kernel_initializer=initializer)(x)
-  last = Activation('sigmoid')(logits)
+  d = res_encoder_block(d, 1*ndf, k_size=4, activation='LReLU', SN=False, batchnorm=False, name=name+'_1')
+  d = res_encoder_block(d, 2*ndf, k_size=4, activation='LReLU', SN=False, batchnorm=False, name=name+'_2')
+  d = res_encoder_block(d, 4*ndf, k_size=4, activation='LReLU', SN=False, batchnorm=False, name=name+'_3')
 
-  return tf.keras.Model(inputs=[inp, tar], outputs=[last, logits])
+  d = tf.keras.layers.ZeroPadding2D()(d)
+  d = res_encoder_block(d, 8*ndf, k_size=4, activation='LReLU', strides=1, SN=False, batchnorm=False, padding='valid', name=name+'_4')
+  d = tf.keras.layers.ZeroPadding2D()(d)
+  logits = tf.keras.layers.Conv2D(1, (4,4), padding='valid', kernel_initializer=init, name=name+'_conv2D_5')(d)
+  out = tf.keras.layers.Activation('sigmoid', name=name+'_act_sigmoid')(logits)
+
+  model = tf.keras.Model(inputs=[inp, tar], outputs=[out, logits])
+  return model
 
 
 def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64):
@@ -273,27 +268,30 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64)
   # layer_5
   down4_pad = tf.keras.layers.ZeroPadding2D()(leaky_relu)  # (batch_size, 33, 33, 512) 17, 17, 256
   last = tf.keras.layers.Conv2D(1, 4, strides=1,
-                                kernel_initializer=initializer)(down4_pad)
+                                kernel_initializer=initializer,
+                                activation='sigmoid')(down4_pad)
   
   return tf.keras.Model(inputs=[inp, tar], outputs=last)
+
 
 if config['residual_generator']:
   discriminator = resDiscriminator(input_shape, target_shape, ndf)
 else:
   discriminator = Discriminator(input_shape, target_shape, ndf)
-print(discriminator.summary())
-
 disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
 fig = plt.figure()
 plt.imshow(disc_out[0, ..., -1], vmin=-20, vmax=20, cmap='RdBu_r')
 plt.colorbar()
 fig.savefig(output_folder + '/disc_out.png')
+print(discriminator.summary())
+
+
 
 def discriminator_loss(disc_real_output, disc_generated_output):
-  real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
-  generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
-  total_disc_loss = real_loss + generated_loss
-  # total_disc_loss = tf.reduce_mean(-(tf.math.log(disc_real_output + EPS) + tf.math.log(1 - disc_generated_output + EPS))) # affine-layer
+  #real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
+  #generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
+  #total_disc_loss = real_loss + generated_loss
+  total_disc_loss = tf.reduce_mean(-(tf.math.log(disc_real_output + EPS) + tf.math.log(1 - disc_generated_output + EPS))) # affine-layer
   return total_disc_loss
 
 generator_optimizer = tf.keras.optimizers.Adam(config['lr'], beta_1=config['beta1'])
@@ -314,11 +312,11 @@ def cross_entropy_loss(labels, logits):
     return loss
 
 def lsgan_loss(labels, logits):
-        loss = tf.reduce_mean(tf.squared_difference(logits, labels))
+        loss = tf.reduce_mean(tf.math.squared_difference(logits, labels))
         return loss 
     
 def l1_loss(a, b):
-    loss = tf.reduce_mean(tf.abs(a - b))
+    loss = tf.reduce_mean(tf.math.abs(a - b))
     return loss
 
 os.makedirs(out_dir, exist_ok=True)
@@ -337,10 +335,10 @@ def res_train_step(input_image, target, step):
     d_loss_fake = lsgan_loss(tf.zeros_like(disc_real_output), disc_fake_logits)
     disc_loss = (d_loss_real + d_loss_fake) / 2.0
     # reconstruction loss
-    reco_loss = LAMBDA * l1_loss(input_image, gen_output)
+    gen_l1_loss = LAMBDA * l1_loss(target, gen_output)
     # generator loss
-    g_loss_ = lsgan_loss(tf.ones_like(disc_generated_output), disc_fake_logits)
-    gen_total_loss =  g_loss_ + reco_loss
+    gen_gan_loss = lsgan_loss(tf.ones_like(disc_generated_output), disc_fake_logits)
+    gen_total_loss =  gen_gan_loss + gen_l1_loss
 
   generator_gradients = gen_tape.gradient(gen_total_loss,
                                           generator.trainable_variables)
