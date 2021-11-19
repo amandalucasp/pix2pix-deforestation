@@ -62,6 +62,8 @@ st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H-%M-%S')
 output_folder = config['unet_data_path'] + config['training_output_path'] + 'output_' + st + '_patchsize_' + str(patch_size) + '_batchsize_' + str(batch_size) + '_epochs_' + str(epochs) + '_patience_' + str(patience_value)
 if config['synthetic_data_path'] != '':
   output_folder = output_folder + '_augmented'
+if config['augment_data']:
+  output_folder = output_folder + '_classic_data_augmentation'
 os.makedirs(output_folder, exist_ok = True)
 shutil.copy('./config.yaml', output_folder)
 
@@ -220,9 +222,6 @@ def test_model(model, patch_test):
 # https://github.com/xkumiyu/numpy-data-augmentation/blob/master/process_image.py
 
 
-from skimage.transform import rescale, resize, downscale_local_mean
-
-
 def check_size(size):
     if type(size) == int:
         size = (size, size)
@@ -231,13 +230,14 @@ def check_size(size):
     return size
 
 
-def resize(image, size):
-    size = check_size(size)
-    image = resize(image, size)
-    return image
+def resize_image(image, ref, size):
+    #size = check_size(size)
+    image = skimage.transform.resize(image, (size, size))
+    ref = skimage.transform.resize(ref, (size, size))
+    return image, ref
 
 
-def random_crop(image, ref, crop_size):
+def random_crop_image(image, ref, crop_size):
     crop_size = check_size(crop_size)
     h, w, _ = image.shape
     top = np.random.randint(0, h - crop_size[0])
@@ -245,38 +245,50 @@ def random_crop(image, ref, crop_size):
     bottom = top + crop_size[0]
     right = left + crop_size[1]
     image = image[top:bottom, left:right, :]
-    ref = ref[top:bottom, left:right, :]
+    ref = ref[top:bottom, left:right]
     return image, ref
 
 
 def data_augmentation(image, ref):
 
-  aug = np.random.randint(2)
+  aug = np.random.randint(3)
+  #print('aug:', aug)
+  #fig = plt.figure(figsize=(15, 15))
+  #plt.imshow(image[:,:,:3])
+  #fig.savefig(str(i) + '_0.png')
+  #plt.close(fig)
+
+  image_shape = image.shape
 
   if aug == 1:
     # random crop
-    concat_image = np.concatenate((image, ref), axis=-1)
-    concat_image = resize(concat_image, IMG_HEIGHT + 30)
-    image, ref = np.split(concat_image, axis=-1)
-    image, ref = random_crop(image, ref)
+    image, ref = resize_image(image, ref, image_shape[0] + 30)
+    image, ref = random_crop_image(image, ref, image_shape[0])
+    #fig = plt.figure(figsize=(15, 15))
+    #plt.imshow(image[:,:,:3])
+    #fig.savefig(str(i) + '_1.png')
+    #plt.close(fig)
   if aug == 2:
     # rotation
     image = np.rot90(image)
     ref = np.rot90(ref)
+    #fig = plt.figure(figsize=(15, 15))
+    #plt.imshow(image[:,:,:3])
+    #fig.savefig(str(i) + '_2.png')
+    #plt.close(fig)
 
   return image, ref
 
 
-def load_patches(root_path, folder, from_pix2pix=False):
+def load_patches(root_path, folder, from_pix2pix=False, augment_data=False):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
   img_files = os.listdir(imgs_dir)
-  np.save(root_path + '/img_files.npy', img_files)
+  #np.save(root_path + '/img_files.npy', img_files)
   patches = []
   patches_ref = []
 
   selected_pos = np.arange(len(img_files))
-
   if from_pix2pix and len(img_files) > 5000:
     print('[*]Loading input from pix2pix.', from_pix2pix)
     np.random.seed(2020)
@@ -292,12 +304,14 @@ def load_patches(root_path, folder, from_pix2pix=False):
     mask = np.load(mask_path)
     if from_pix2pix: # todo consertar a parada na saida do pix2pixutils pra nao precisar disso aqui
       mask = to_unet_format(mask)
-
-    img, mask = data_augmentation(img, ref)
-
+    if augment_data:
+      img, mask = data_augmentation(img, mask)
     patches.append(img)
     patches_ref.append(mask)
-
+    #fig = plt.figure(figsize=(15, 15))
+    #plt.imshow(mask)
+    #fig.savefig(str(i) + '.png')
+    #plt.close(fig)
   return np.array(patches), np.array(patches_ref)
 
 
@@ -305,13 +319,12 @@ def to_unet_format(mask):
   # pix2pix is fed a 3-channels mask, but u-net expects a 1-channel mask
   mask = mask[:,:,0]
   # print(mask.shape)
-  unique, counts = np.unique(mask, return_counts=True)
-  # print(unique, counts)
+  #unique, counts = np.unique(mask, return_counts=True)
   mask[mask == 1] = 2
   mask[mask == 0] = 1
   mask[mask == -1] = 0
-  unique, counts = np.unique(mask, return_counts=True)
-  #print(unique, counts)
+  #unique, counts = np.unique(mask, return_counts=True)
+  #print('to_unet_format:', unique, counts)
   return mask
 
 
@@ -485,6 +498,7 @@ pad_cols = cols - np.ceil(cols/(n_cols*2**n_pool))*n_cols*2**n_pool
 npad = ((0, int(abs(pad_rows))), (0, int(abs(pad_cols))), (0, 0))
 image1_pad = np.pad(image_array, pad_width=npad, mode='reflect')
 h, w, c = image1_pad.shape
+print('h, w, c:', h, w, c)
 patch_size_rows = h//n_rows
 patch_size_cols = w//n_cols
 num_patches_x = int(h/patch_size_rows)
@@ -496,7 +510,7 @@ print('[*] Loading patches...')
 
 # Training patches
 print('[*]Loading training patches.')
-patches_train, patches_tr_ref = load_patches(root_path, training_dir) # retorna np.array(patches), np.array(patches_ref)
+patches_train, patches_tr_ref = load_patches(root_path, training_dir, augment_data=config['augment_data']) # retorna np.array(patches), np.array(patches_ref)
 if config['synthetic_data_path'] != '':
   synt_data_path = config['synthetic_data_path']
   patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], '', from_pix2pix=True)
@@ -512,55 +526,12 @@ print('[*]Loading testing patches.')
 patches_test, patches_test_ref = load_patches(root_path, testing_dir)
 
 # Test tiles
-tiles_test, tiles_test_ref = load_tiles(root_path, testing_tiles_dir, tiles_ts)
+#tiles_test, tiles_test_ref = load_tiles(root_path, testing_tiles_dir, tiles_ts)
 
-'''
-import glob
-
-im_shape = [config['image_width'], config['image_height'], config['input_channels']]
-tar_shape = [config['image_width'], config['image_height'], 1]
-
-print('im_shape:', im_shape)
-print('tar_shape:', tar_shape)
-
-npy_path = pathlib.Path(config['unet_data_path'])
-
-train_images = glob.glob(str(npy_path / 'training_data/imgs/*.npy'))
-train_labels = glob.glob(str(npy_path / 'training_data/masks/*.npy'))
-BUFFER_SIZE = len(train_images)
-train_ds = tf.data.Dataset.from_tensor_slices((train_images, train_labels))
-train_ds = train_ds.map(lambda img, label: tuple(tf.compat.v1.numpy_function(load_npy_train, [img, label], [tf.float32,tf.float32])))
-#train_ds = train_ds.map(lambda img, label: set_shapes(img, label, im_shape, tar_shape))
-train_ds = train_ds.shuffle(BUFFER_SIZE)
-train_ds = train_ds.batch(config['batch_size_unet'])
-
-val_images = glob.glob(str(npy_path / 'validation_data/imgs/*.npy'))
-val_labels = glob.glob(str(npy_path / 'validation_data/masks/*.npy'))
-#BUFFER_SIZE = len(val_images)
-val_ds = tf.data.Dataset.from_tensor_slices((val_images, val_labels))
-val_ds = val_ds.map(lambda img, label: tuple(tf.compat.v1.numpy_function(load_npy_test, [img, label], [tf.float32,tf.float32])))
-#val_ds = val_ds.map(lambda img, label: set_shapes(img, label, im_shape, tar_shape))
-val_ds = val_ds.batch(config['batch_size_unet'])
-
-test_images = glob.glob(str(npy_path / 'testing_data/imgs/*.npy'))
-test_labels = glob.glob(str(npy_path / 'testing_data/masks/*.npy'))
-#BUFFER_SIZE = len(test_images)
-test_ds = tf.data.Dataset.from_tensor_slices((test_images, test_labels))
-test_ds = test_ds.map(lambda img, label: tuple(tf.compat.v1.numpy_function(load_npy_test, [img, label], [tf.float32,tf.float32])))
-#test_ds = test_ds.map(lambda img, label: set_shapes(img, label, im_shape, tar_shape))
-test_ds = test_ds.batch(config['batch_size_unet'])
-
-print('[*] Train Dataset:')
-print(train_ds)
-print('[*] Validation Dataset:')
-print(val_ds)
-print('[*] Test Dataset:')
-print(test_ds)
-'''
 print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.shape))
 print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))
 print("[*] Patches for Testing:", str(patches_test.shape), str(patches_test_ref.shape))
-print("[*] Tiles for Testing:", str(tiles_test.shape), str(tiles_test_ref.shape))
+#print("[*] Tiles for Testing:", str(tiles_test.shape), str(tiles_test_ref.shape))
 
 patches_val_lb_h = tf.keras.utils.to_categorical(patches_val_ref, number_class)
 patches_te_lb_h = tf.keras.utils.to_categorical(patches_test_ref, number_class)
@@ -681,10 +652,12 @@ plt.title('Prediction')
 ax1.imshow(mean_prob, cmap = cmap)
 ax1.axis('off')
 
-final_mask[final_mask == 2] = 0
+ref2 = final_mask.copy()
+ref2 [final_mask == 2] = 0
+#final_mask[final_mask == 2] = 0
 ax2 = fig.add_subplot(122)
 plt.title('Reference')
-ax2.imshow(final_mask, cmap = cmap)
+ax2.imshow(ref2, cmap = cmap)
 ax2.axis('off')
 fig.savefig(output_folder + '/mean_map_and_ref.png')
 
@@ -693,6 +666,8 @@ mean_prob = mean_prob[:final_mask.shape[0], :final_mask.shape[1]]
 # print(tiles_ts.shape)
 print(mask_tiles.shape)
 print(mean_prob.shape)
+
+print('=>final_mask unique values:', np.unique(final_mask))
 
 mask_amazon_ts = np.zeros((mask_tiles.shape)).astype('float32')
 for ts_ in tiles_ts:
