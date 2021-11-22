@@ -261,17 +261,15 @@ def data_augmentation(image, ref):
   image_shape = image.shape
 
   if aug == 1:
-    # random crop
-    image, ref = resize_image(image, ref, image_shape[0] + 30)
-    image, ref = random_crop_image(image, ref, image_shape[0])
-    #fig = plt.figure(figsize=(15, 15))
-    #plt.imshow(image[:,:,:3])
-    #fig.savefig(str(i) + '_1.png')
-    #plt.close(fig)
-  if aug == 2:
-    # rotation
-    image = np.rot90(image)
-    ref = np.rot90(ref)
+    image = np.fliplr(image)
+    ref = np.fliplr(ref)
+  elif aug == 2:
+    image = np.flipud(image)
+    ref = np.flipud(ref)   
+  else:
+    t = np.random.randint(4)
+    image = np.rot90(image, t)
+    ref = np.rot90(ref, t)
     #fig = plt.figure(figsize=(15, 15))
     #plt.imshow(image[:,:,:3])
     #fig.savefig(str(i) + '_2.png')
