@@ -14,7 +14,6 @@ import os
 
 
 import tensorflow as tf
-# from tensorflow.keras.layers import Conv2D, Dense, MaxPooling2D, Dropout, Activation, Flatten, Input, concatenate, UpSampling2D, BatchNormalization
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, accuracy_score, average_precision_score
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.models import Model, load_model, Sequential
@@ -22,10 +21,6 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from tensorflow.keras.optimizers import Adam, SGD, RMSprop
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import *
-
-#tf.disable_v2_behavior()
-#physical_devices = tf.config.experimental.list_physical_devices('GPU')
-#tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 import skimage
 from skimage.util.shape import view_as_windows
@@ -74,7 +69,7 @@ os.makedirs(output_folder, exist_ok = True)
 shutil.copy('./config.yaml', output_folder)
 
 
-def normalization(image, norm_type = 1):
+def normalization_image(image, norm_type = 1):
     image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
     if (norm_type == 1):
         scaler = StandardScaler()
@@ -90,17 +85,15 @@ def normalization(image, norm_type = 1):
     return image_normalized1
 
 
-def normalization_new(image, norm_type = 1, scaler = None):
-    #print('image:', image.shape)
+def normalization(image, norm_type = 1, scaler = None):
     image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
-    #print('image_reshaped:', image_reshaped.shape)
     if scaler != None:
       print('Fitting data to provided scaler...')
       print('>> scaler.data_max_:', (scaler.data_max_))
       print('>> scaler.data_min_:', (scaler.data_min_))
     else:
       image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
-      print('No scaler was provided. Fitting scaler',str(norm_type),'to data...')
+      print('No scaler was provided. Fitting scaler', str(norm_type), 'to data...')
       if (norm_type == 1):
           scaler = StandardScaler()
       if (norm_type == 2):
@@ -116,7 +109,6 @@ def normalization_new(image, norm_type = 1, scaler = None):
     
     image_normalized = scaler.transform(image_reshaped)
     image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2], image.shape[3])
-    #print('image_normalized1:', image_normalized1.shape)
     return image_normalized1, scaler
 
 
@@ -290,17 +282,9 @@ def data_augmentation(image, ref):
   if np.random.rand() <= 0.5:
     return image, ref
   else:
-    aug = np.random.randint(3)
-    if aug == 1:
-      image = np.fliplr(image)
-      ref = np.fliplr(ref)
-    elif aug == 2:
-      image = np.flipud(image)
-      ref = np.flipud(ref)   
-    else:
-      t = np.random.randint(3)
-      image = np.rot90(image, t + 1)
-      ref = np.rot90(ref, t + 1)
+    t = np.random.randint(3)
+    image = np.rot90(image, t + 1)
+    ref = np.rot90(ref, t + 1)
 
   return image, ref
 
@@ -309,7 +293,6 @@ def load_patches(root_path, folder, from_pix2pix=False, augment_data=False):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
   img_files = os.listdir(imgs_dir)
-  #np.save(root_path + '/img_files.npy', img_files)
   patches = []
   patches_ref = []
 
@@ -325,13 +308,11 @@ def load_patches(root_path, folder, from_pix2pix=False, augment_data=False):
     img_path = imgs_dir + img_files[i]
     mask_path = masks_dir + img_files[i]
     img = np.load(img_path)
-    if not from_pix2pix:
-      img = normalization(img, norm_type = type_norm_unet)
     mask = np.load(mask_path)
     if from_pix2pix: # todo consertar a parada na saida do pix2pixutils pra nao precisar disso aqui
       mask = to_unet_format(mask)
-    #if augment_data:
-      #img, mask = data_augmentation(img, mask)
+    if augment_data:
+      img, mask = data_augmentation(img, mask)
     patches.append(img)
     patches_ref.append(mask)
   return np.array(patches), np.array(patches_ref)
@@ -510,8 +491,8 @@ print('[*] Loading patches...')
 # Training patches
 print('[*] Loading training patches.')
 patches_train, patches_tr_ref = load_patches(root_path, training_dir, augment_data=config['augment_data']) # retorna np.array(patches), np.array(patches_ref)
+patches_train, train_scaler = normalization(patches_train, norm_type = type_norm_unet)
 print(np.min(patches_train), np.max(patches_train))
-
 if config['synthetic_data_path'] != '':
   synt_data_path = config['synthetic_data_path']
   patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], '', from_pix2pix=True)
@@ -519,20 +500,19 @@ if config['synthetic_data_path'] != '':
   print(np.unique(patches_tr_ref), np.unique(patches_tr_synt_ref))
   patches_train = np.concatenate((patches_train, patches_train_synt))
   patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))
-#patches_train, train_scaler = normalization(patches_train, norm_type = type_norm_unet)
 
 # Validation patches
 print('[*] Loading validation patches.')
 patches_val, patches_val_ref = load_patches(root_path, validation_dir)
-#patches_val, _ = normalization(patches_val, norm_type = type_norm_unet) #, scaler = train_scaler)
+patches_val, _ = normalization(patches_val, norm_type = type_norm_unet, scaler = train_scaler)
 # Test patches
 print('[*] Loading testing patches.')
 patches_test, patches_test_ref = load_patches(root_path, testing_dir)
-#patches_test, _ = normalization(patches_test, norm_type = type_norm_unet) #, scaler = train_scaler)
+patches_test, _ = normalization(patches_test, norm_type = type_norm_unet, scaler = train_scaler)
 
 image_stack, final_mask = get_dataset(config)
 print('[*] Normalizing image array...')
-image_array = normalization(image_stack.copy(), norm_type = type_norm_unet) #, scaler = train_scaler)
+image_array = normalization_image(image_stack.copy(), norm_type = type_norm_unet)#, scaler = train_scaler)
 mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5, 4))
 print('[*] Creating padded image...')
 n_pool = 3
@@ -551,13 +531,9 @@ num_patches_x = int(h/patch_size_rows)
 num_patches_y = int(w/patch_size_cols)
 input_shape=(patch_size_rows,patch_size_cols, c)
 
-# Test tiles
-#tiles_test, tiles_test_ref = load_tiles(root_path, testing_tiles_dir, tiles_ts)
-
 print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.shape))
 print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))
 print("[*] Patches for Testing:", str(patches_test.shape), str(patches_test_ref.shape))
-#print("[*] Tiles for Testing:", str(tiles_test.shape), str(tiles_test_ref.shape))
 
 patches_val_lb_h = tf.keras.utils.to_categorical(patches_val_ref, number_class)
 patches_te_lb_h = tf.keras.utils.to_categorical(patches_test_ref, number_class)
@@ -607,13 +583,12 @@ for run in range(number_runs):
   net.compile(loss = loss, optimizer=adam , metrics=['accuracy'])
 
   start_training = time.time()
-  #model, validation_accuracy, training_accuracy = train_model(net, patches_train, patches_tr_lb_h, patches_val, patches_val_lb_h, batch_size, epochs, patience_value)
   earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=config['patience_value'], verbose=1, mode='min')
   checkpoint = ModelCheckpoint(path_models+ '/' + method +'_'+str(run)+'.h5', monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-  lr_reduce = ReduceLROnPlateau(factor=0.9, min_delta=0.0001, patience=5, verbose=1)
+  lr_reduce = ReduceLROnPlateau(factor=0.9, min_delta=0.0001, patience=config['patience_value'], verbose=1)
   callbacks_list = [earlystop, checkpoint]
   
-  print('Running fit')
+  print('Running fit.')
   history = net.fit(train_datagen.flow(patches_train, patches_tr_lb_h, batch_size=batch_size, shuffle=True, seed=0),
     epochs=epochs,
     steps_per_epoch=steps_per_epoch,
@@ -625,14 +600,25 @@ for run in range(number_runs):
   name = 'checkpoints/model_{}_epochs_{}_bsize_{}.h5'.format(run, epochs, batch_size)
   net.save(output_folder + '/' + name)
 
+
   fig = plt.figure(figsize=(8, 8))
   plt.subplot(2, 1, 1)
-  plt.plot(training_accuracy, label='Training Accuracy')
-  plt.plot(validation_accuracy, label='Validation Accuracy')
+  plt.plot(history.history['acc'], label='Training Accuracy')
+  plt.plot(history.history['val_acc'], label='Validation Accuracy')
   plt.legend(loc='lower right')
   plt.ylabel('Accuracy')
   plt.ylim([min(plt.ylim()),1])
   fig.savefig(output_folder + '/accuracy_model_' + str(run) + '.png')
+  plt.close(fig)
+
+  fig = plt.figure(figsize=(8, 8))
+  plt.subplot(2, 1, 1)
+  plt.plot(history.history['loss'], label='Training Loss')
+  plt.plot(history.history['val_loss'], label='Validation Loss')
+  plt.legend(loc='lower right')
+  plt.ylabel('Loss')
+  plt.ylim([min(plt.ylim()),1])
+  fig.savefig(output_folder + '/loss_model_' + str(run) + '.png')
   plt.close(fig)
 
   # test the model on testing patches 
@@ -647,7 +633,7 @@ for run in range(number_runs):
   # testing the model
   new_model = build_unet(input_shape, nb_filters, number_class)
   # model = load_model(name, compile=False)
-  for l in range(1, len(model.layers)):
+  for l in range(1, len(net.layers)):
     new_model.layers[l].set_weights(net.layers[l].get_weights())
   print('Loaded weights for testing model')
   patch_t = []
@@ -668,7 +654,7 @@ for run in range(number_runs):
   prob_recontructed = pred_reconctruct(h, w, num_patches_x, num_patches_y, patch_size_rows, patch_size_cols, patches_pred)
   np.save(output_folder +'/prob_'+str(run)+'.npy',prob_recontructed) 
   time_ts.append(end_test)
-  del prob_recontructed, model, patches_pred
+  del prob_recontructed, net, patches_pred
 
 time_tr_array = np.asarray(time_tr)
 np.save(output_folder+'/metrics_tr.npy', time_tr_array)
