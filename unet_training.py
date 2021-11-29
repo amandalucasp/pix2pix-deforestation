@@ -40,13 +40,12 @@ config = yaml.load(stream, Loader=yaml.CLoader)
 patch_size = config['patch_size']
 channels = config['input_channels']
 number_class = 2 if config['two_classes_problem'] else 3
-
 stride = int((1 - config['overlap']) * config['patch_size'])
 tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
 
 root_path = config['unet_data_path']
 
-training_dir = '/training_data' #/augmented_dataset' 
+training_dir = '/training_data' 
 validation_dir = '/validation_data'
 testing_dir = '/testing_data'
 testing_tiles_dir = '/testing_data/tiles_ts/'
@@ -85,14 +84,22 @@ def normalization_image(image, norm_type = 1):
     return image_normalized1
 
 
-def normalization(image, norm_type = 1, scaler = None):
-    image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
+def test_model(model, patch_test):
+  result = model.predict(patch_test)
+  predicted_class = np.argmax(result, axis=-1)
+  return predicted_class
+
+
+def normalization_unet(image, norm_type = 1, scaler = None):
+
+    if image.ndim == 4:
+      image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
+    if image.ndim == 3:
+      image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
+
     if scaler != None:
       print('Fitting data to provided scaler...')
-      print('>> scaler.data_max_:', (scaler.data_max_))
-      print('>> scaler.data_min_:', (scaler.data_min_))
     else:
-      image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
       print('No scaler was provided. Fitting scaler', str(norm_type), 'to data...')
       if (norm_type == 1):
           scaler = StandardScaler()
@@ -103,12 +110,12 @@ def normalization(image, norm_type = 1, scaler = None):
       if (norm_type == 4):
           scaler = MinMaxScaler(feature_range=(0,2))
       scaler = scaler.fit(image_reshaped) # todo retornar esse scaler do treino pra usar nos dados de validacao e teste
-      print('> Output scaler params:')
-      print('>> scaler.data_max_:', (scaler.data_max_))
-      print('>> scaler.data_min_:', (scaler.data_min_))
     
     image_normalized = scaler.transform(image_reshaped)
-    image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2], image.shape[3])
+    if image.ndim == 4:
+      image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2], image.shape[3])
+    if image.ndim == 3:
+      image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2])
     return image_normalized1, scaler
 
 
@@ -177,126 +184,20 @@ def compute_metrics(true_labels, predicted_labels):
   return accuracy, f1score, recall, precision
 
 
-def train_model(net, patches_train, patches_tr_lb_h, patches_val, patches_val_lb_h, batch_size, epochs, patience_value):
-  print('Start training.. ')
-
-  waiting_time = 0
-
-  validation_accuracy = []
-  training_accuracy = []
-
-  for epoch in range(epochs):
-    loss_tr = np.zeros((1 , 2))
-    loss_val = np.zeros((1 , 2))
-    # Computing the number of batchs
-    n_batchs_tr = patches_train.shape[0]//batch_size
-    # Random shuffle the data
-    patches_train , patches_tr_lb_h = shuffle(patches_train , patches_tr_lb_h , random_state = 0)
-        
-    # Training the network per batch
-    for  batch in range(n_batchs_tr):
-      x_train_b = patches_train[batch * batch_size : (batch + 1) * batch_size , : , : , :]
-      y_train_h_b = patches_tr_lb_h[batch * batch_size : (batch + 1) * batch_size , :, :, :]
-      loss_tr = loss_tr + net.train_on_batch(x_train_b , y_train_h_b)
-    
-    # Training loss
-    loss_tr = loss_tr/n_batchs_tr
-    print("%d [Training loss: %f , Train acc.: %.2f%%]" %(epoch , loss_tr[0 , 0], 100*loss_tr[0 , 1]))
-    training_accuracy.append(loss_tr[0 , 1])
-
-    # Computing the number of batchs
-    n_batchs_val = patches_val.shape[0]//batch_size
-
-    # Evaluating the model in the validation set
-    for  batch in range(n_batchs_val):
-      x_val_b = patches_val[batch * batch_size : (batch + 1) * batch_size , : , : , :]
-      y_val_h_b = patches_val_lb_h[batch * batch_size : (batch + 1) * batch_size , :, :, :]
-      loss_val = loss_val + net.test_on_batch(x_val_b , y_val_h_b)
-    
-    # validation loss
-    loss_val = loss_val/n_batchs_val
-    print("%d [Validation loss: %f , Validation acc.: %.2f%%]" %(epoch , loss_val[0 , 0], 100*loss_val[0 , 1]))
-    validation_accuracy.append(loss_val[0 , 1])
-
-    if epoch == 0:
-      best_loss_val = loss_val[0 , 0]
-
-    print("=> Best_loss_val [ES Criteria]:", str(best_loss_val), "Patience:", str(waiting_time))
-
-    # early stopping
-    if loss_val[0 , 0] < best_loss_val:
-      # reset waiting time
-      waiting_time = 0
-      # update best_loss_val
-      best_loss_val = loss_val[0 , 0]
-    else:
-      # increment waiting time
-      waiting_time +=1
-    
-    # if patience value is reached
-    if waiting_time == patience_value:
-      # stop training
-      return net, validation_accuracy, training_accuracy
-
-  return net, validation_accuracy, training_accuracy
-
-
-def test_model(model, patch_test):
-  result = model.predict(patch_test)
-  predicted_class = np.argmax(result, axis=-1)
-  return predicted_class
-
-
-# https://github.com/xkumiyu/numpy-data-augmentation/blob/master/process_image.py
-
-
-def check_size(size):
-    if type(size) == int:
-        size = (size, size)
-    if type(size) != tuple:
-        raise TypeError('size is int or tuple')
-    return size
-
-
-def resize_image(image, ref, size):
-    #size = check_size(size)
-    image = skimage.transform.resize(image, (size, size))
-    ref = skimage.transform.resize(ref, (size, size))
-    return image, ref
-
-
-def random_crop_image(image, ref, crop_size):
-    crop_size = check_size(crop_size)
-    h, w, _ = image.shape
-    top = np.random.randint(0, h - crop_size[0])
-    left = np.random.randint(0, w - crop_size[1])
-    bottom = top + crop_size[0]
-    right = left + crop_size[1]
-    image = image[top:bottom, left:right, :]
-    ref = ref[top:bottom, left:right]
-    return image, ref
-
-
-def data_augmentation(image, ref):
-
-  if np.random.rand() <= 0.5:
-    return image, ref
-  else:
-    t = np.random.randint(3)
-    image = np.rot90(image, t + 1)
-    ref = np.rot90(ref, t + 1)
-
+def data_augmentation(img, mask):
+  image = np.rot90(img, 1)
+  ref = np.rot90(mask, 1)
   return image, ref
 
 
-def load_patches(root_path, folder, from_pix2pix=False, augment_data=False):
+def load_patches(root_path, folder, from_pix2pix=False, augment_data=False, number_class=3):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
   img_files = os.listdir(imgs_dir)
   patches = []
   patches_ref = []
-
   selected_pos = np.arange(len(img_files))
+
   if from_pix2pix and len(img_files) > 1000:
     print('[*]Loading input from pix2pix.', from_pix2pix)
     np.random.seed(2020)
@@ -306,13 +207,20 @@ def load_patches(root_path, folder, from_pix2pix=False, augment_data=False):
 
   for i in selected_pos:
     img_path = imgs_dir + img_files[i]
-    mask_path = masks_dir + img_files[i]
+    mask_path = masks_dir + img_files[i]    
     img = np.load(img_path)
     mask = np.load(mask_path)
     if from_pix2pix: # todo consertar a parada na saida do pix2pixutils pra nao precisar disso aqui
       mask = to_unet_format(mask)
-    if augment_data:
+    if augment_data and np.random.rand() > 0.5:
       img, mask = data_augmentation(img, mask)
+      #print('3:', img.shape, mask.shape)
+      #combined = np.zeros(shape=(h,w*3,c//2))
+      #combined[:,:w,:] = img[:,:,:3]
+      #combined[:,w:2*w,:] = img[:,:,3:]
+      #combined[:,2*w:,:] = 127.5*cv2.cvtColor(mask.copy(), cv2.COLOR_GRAY2BGR)
+      #cv2.imwrite(str(img_files[i].replace('.npy','_2.png')), combined)
+    mask = tf.keras.utils.to_categorical(mask, number_class)
     patches.append(img)
     patches_ref.append(mask)
   return np.array(patches), np.array(patches_ref)
@@ -331,88 +239,13 @@ def to_unet_format(mask):
   return mask
 
 
-def resize(image, target, height, width):
-  image = tf.image.resize(image, [height, width], method=tf.image.ResizeMethod.AREA)
-  target = tf.image.resize(target, [height, width], method=tf.image.ResizeMethod.AREA)
-  return image, target
-
-
-def random_crop(image, target, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS=3):
-  temp = target
-  while temp.shape[2] != image.shape[2]: # target tem 1 canal, t1 e t2 tem multiplos.
-    temp = tf.concat([temp, target], axis=-1)
-  stacked_image = tf.stack([image, temp])
-  cropped_image = tf.image.random_crop(stacked_image, size=[2, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS*2])
-  target = cropped_image[1, :, :, 0]
-  target = tf.expand_dims(target, axis=-1)
-  return cropped_image[0], target # image, mask
-
-
-def normalize_(input_image, real_image):   
-  # Normalizing the images to [-1, 1]
-  input_image = (input_image / 127.5) - 1
-  real_image = (real_image / 127.5) - 1
-  return input_image, real_image
-
-
-@tf.function()
-def random_jitter(image, target, NUM_CHANNELS=3):
-  image, target = resize(image, target, (IMG_HEIGHT + 30), (IMG_WIDTH + 30))
-  image, target = random_crop(image, target, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS)
-  if tf.random.uniform(()) > 0.5:
-    image = tf.image.flip_left_right(image)
-    target = tf.image.flip_left_right(target)
-  return image, target
-
-
-def load_npy_train(image, target):
-  image, target = load_npy(image, target)
-  image, target = random_jitter(image, target)
-  image, target = normalize_(image, target)
-  #image = tf.reshape(image, shape=(128, 128, 6))
-  #target = tf.reshape(image, shape=(128, 128, 1))
-  return image, target
-
-
-def load_npy_test(image, target):
-  imag = load_npy(image, target)
-  image, target = resize(image, target, IMG_HEIGHT, IMG_WIDTH)
-  image, target = normalize(image, target)
-  #image = tf.reshape(image, shape=(128, 128, 6))
-  #target = tf.reshape(image, shape=(128, 128, 1))
-  return image, target
-
-
-def load_npy(image, target):
-  image = np.load(image)
-  target = np.load(target)
-  if target.ndim == 3 and target.shape[2] == 3: # 128x128x3 [patches gerados pelo pix2pix]
-    target = target[:,:,0]
-    target[target == 1] = 2
-    target[target == 0] = 1
-    target[target == -1] = 0
-    if target.ndim == 2:
-      target = np.expand_dims(target, axis=-1)
-  if target.ndim == 2: # 128,128 [patches originais]
-    target = np.expand_dims(target, axis=-1)
-  image = tf.cast(image, tf.float32)
-  target = tf.cast(target, tf.float32)
-  return image, target
-
-
-def set_shapes(img, label, img_shape, label_shape):
-  img.set_shape(img_shape)
-  label.set_shape(label_shape)
-  return img, label
-
-
 def load_tiles(root_path, testing_tiles_dir, tiles_ts):
   dir_ts = root_path + testing_tiles_dir
   img_list = []
   ref_list = []
   for num_tile in tiles_ts:
     img = np.load(dir_ts + str(num_tile) + '_img.npy')
-    #img = normalization(img, norm_type = type_norm_unet) # normaliza entre -1 e +1
+    #img = normalization_unet(img, norm_type = type_norm_unet) # normaliza entre -1 e +1
     ref = np.load(dir_ts + str(num_tile) + '_ref.npy')
     print(img.shape, ref.shape)
     img_list.append(img)
@@ -491,28 +324,25 @@ print('[*] Loading patches...')
 # Training patches
 print('[*] Loading training patches.')
 patches_train, patches_tr_ref = load_patches(root_path, training_dir, augment_data=config['augment_data']) # retorna np.array(patches), np.array(patches_ref)
-patches_train, train_scaler = normalization(patches_train, norm_type = type_norm_unet)
-print(np.min(patches_train), np.max(patches_train))
+patches_train, train_scaler = normalization_unet(patches_train, norm_type = type_norm_unet)
+
 if config['synthetic_data_path'] != '':
   synt_data_path = config['synthetic_data_path']
   patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], '', from_pix2pix=True)
-  print(patches_tr_ref.shape, patches_tr_synt_ref.shape)
-  print(np.unique(patches_tr_ref), np.unique(patches_tr_synt_ref))
   patches_train = np.concatenate((patches_train, patches_train_synt))
   patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))
 
 # Validation patches
 print('[*] Loading validation patches.')
-patches_val, patches_val_ref = load_patches(root_path, validation_dir)
-patches_val, _ = normalization(patches_val, norm_type = type_norm_unet, scaler = train_scaler)
+patches_val, patches_val_ref = load_patches(root_path, validation_dir, augment_data=config['augment_data'])
+patches_val, _ = normalization_unet(patches_val, norm_type = type_norm_unet, scaler = train_scaler)
 # Test patches
 print('[*] Loading testing patches.')
 patches_test, patches_test_ref = load_patches(root_path, testing_dir)
-patches_test, _ = normalization(patches_test, norm_type = type_norm_unet, scaler = train_scaler)
-
-image_stack, final_mask = get_dataset(config)
+patches_test, _ = normalization_unet(patches_test, norm_type = type_norm_unet, scaler = train_scaler)
 print('[*] Normalizing image array...')
-image_array = normalization_image(image_stack.copy(), norm_type = type_norm_unet)#, scaler = train_scaler)
+image_stack, final_mask = get_dataset(config)
+image_array = normalization_image(image_stack.copy(), norm_type = type_norm_unet) # , scaler = train_scaler)
 mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5, 4))
 print('[*] Creating padded image...')
 n_pool = 3
@@ -535,16 +365,31 @@ print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.
 print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))
 print("[*] Patches for Testing:", str(patches_test.shape), str(patches_test_ref.shape))
 
-patches_val_lb_h = tf.keras.utils.to_categorical(patches_val_ref, number_class)
-patches_te_lb_h = tf.keras.utils.to_categorical(patches_test_ref, number_class)
-patches_tr_lb_h = tf.keras.utils.to_categorical(patches_tr_ref, number_class)
+patches_val_lb_h = patches_val_ref 
+patches_te_lb_h = patches_test_ref 
+patches_tr_lb_h = patches_tr_ref 
 
 if config['augment_data']:
-  train_datagen = ImageDataGenerator(horizontal_flip = True, vertical_flip = True)
-  valid_datagen = ImageDataGenerator(horizontal_flip = True, vertical_flip = True)
+  data_gen_args = dict(horizontal_flip = True, vertical_flip = True)
+
+  patches_train_datagen = ImageDataGenerator(data_gen_args)
+  patches_train_ref_datagen = ImageDataGenerator(data_gen_args)
+
+  patches_valid_datagen = ImageDataGenerator(data_gen_args)
+  patches_valid_ref_datagen = ImageDataGenerator(data_gen_args)
+
 else:
   train_datagen = ImageDataGenerator()
   valid_datagen = ImageDataGenerator()
+
+seed = 1
+patches_train_generator = patches_train_datagen.flow(patches_train, batch_size=batch_size, shuffle=True, seed=seed)
+patches_train_ref_generator = patches_train_datagen.flow(patches_tr_lb_h, batch_size=batch_size, shuffle=True, seed=seed)
+train_generator = (pair for pair in zip(patches_train_generator, patches_train_ref_generator))
+
+patches_valid_generator = patches_valid_datagen.flow(patches_val, batch_size=batch_size, shuffle=False, seed=seed)
+patches_valid_ref_generator = patches_valid_ref_datagen.flow(patches_val_lb_h, batch_size=batch_size, shuffle=False, seed=seed)
+valid_generator = (pair for pair in zip(patches_valid_generator, patches_valid_ref_generator))
 
 os.makedirs(output_folder + '/checkpoints', exist_ok=True)
 
@@ -576,7 +421,7 @@ steps_per_epoch = len(patches_train)*3//config['batch_size_unet']
 validation_steps = len(patches_val)*3//config['batch_size_unet']
 epochs = config['epochs_unet']
 
-for run in range(number_runs):
+for run in range(0, number_runs):
   print('[*] Start training', str(run))
   net = build_unet((patch_size, patch_size, channels), nb_filters, number_class)
   net.summary()
@@ -585,15 +430,15 @@ for run in range(number_runs):
   start_training = time.time()
   earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=config['patience_value'], verbose=1, mode='min')
   checkpoint = ModelCheckpoint(path_models+ '/' + method +'_'+str(run)+'.h5', monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-  lr_reduce = ReduceLROnPlateau(factor=0.9, min_delta=0.0001, patience=config['patience_value'], verbose=1)
+  lr_reduce = ReduceLROnPlateau(factor=0.9, min_delta=0.0001, patience=5, verbose=1)
   callbacks_list = [earlystop, checkpoint]
-  
+
   print('Running fit.')
-  history = net.fit(train_datagen.flow(patches_train, patches_tr_lb_h, batch_size=batch_size, shuffle=True, seed=0),
+  history = net.fit_generator(train_generator,
     epochs=epochs,
     steps_per_epoch=steps_per_epoch,
     callbacks=callbacks_list,
-    validation_data=valid_datagen.flow(patches_val, patches_val_lb_h, batch_size=batch_size, shuffle=False, seed=0),
+    validation_data=valid_generator,
     validation_steps=validation_steps)
   end_training = time.time() - start_training
   time_tr.append(end_training)
@@ -620,15 +465,6 @@ for run in range(number_runs):
   plt.ylim([min(plt.ylim()),1])
   fig.savefig(output_folder + '/loss_model_' + str(run) + '.png')
   plt.close(fig)
-
-  # test the model on testing patches 
-  print(patches_test.shape)
-  predicted_labels = test_model(net, patches_test)
-  metrics = compute_metrics(patches_test_ref.flatten(), predicted_labels.flatten())
-  print("Accuracy:", metrics[0])
-  print("F1 Score:", metrics[1])
-  print("Recall:", metrics[2])
-  print("Precision:", metrics[3])
 
   # testing the model
   new_model = build_unet(input_shape, nb_filters, number_class)
@@ -677,7 +513,6 @@ ax1.axis('off')
 
 ref2 = final_mask.copy()
 ref2 [final_mask == 2] = 0
-#final_mask[final_mask == 2] = 0
 ax2 = fig.add_subplot(122)
 plt.title('Reference')
 ax2.imshow(ref2, cmap = cmap)
@@ -701,7 +536,7 @@ ref1 [final_mask == 2] = 0
 TileMask = mask_amazon_ts * ref1
 GTTruePositives = final_mask==1
 
-Npoints = 50
+Npoints = 10
 Pmax = np.max(mean_prob[GTTruePositives * TileMask ==1])
 ProbList = np.linspace(Pmax,0,Npoints)
 

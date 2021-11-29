@@ -27,7 +27,7 @@ min_percentage: 2
 # path to images
 root_path: '../Sentinel2/' 
 # path to save patches
-output_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128'
+output_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128_baseline_unet'
 # limite utilizado das imagens de entrada -> image is (17729, 9202)
 lim_x: 17700 # 10000
 lim_y: 9200 # 7000
@@ -53,8 +53,8 @@ minipatch_size: 32
 # training_name: 'v0-128'
 data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/'
 # data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/v0_256/samples_change_detection_true_two_classes_false'
-training_steps: 350000
-checkpoint_steps: 35000 # interval to save checkpoint
+training_steps: 400000
+checkpoint_steps: 40000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
 lambda: 100 # weight on L1 term
 gan_weight: 1.0 # weight on GAN term
@@ -75,15 +75,16 @@ binary_mask: False
 
 # TRAINING PARAMETERS - UNET
 unet_data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128_baseline_unet/change_detection_true_two_classes_false/'
-synthetic_data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/17_11_2021_02_24_44/synthetic_data_random/'
+synthetic_data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/20_11_2021_12_06_39/synthetic_data_random/'
+pix2pix_max_samples: 250
 training_output_path: '/unet-results/'
 input_channels: 6
-epochs_unet: 150
+epochs_unet: 100
 batch_size_unet: 32
 nb_filters: [32, 64, 128]
 times: 5
-patience_value: 20
-type_norm_unet: 3
-lr_unet: 0.0001
+patience_value: 10
+type_norm_unet: 1
+lr_unet: 0.001 
 beta1_unet: 0.9
 augment_data: False

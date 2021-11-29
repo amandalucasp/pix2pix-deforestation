@@ -108,6 +108,8 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
     if config['synthetic_input_mode'] == 2:
         # ideia 2 pt 1 - adicionando desmatamento novo em mascaras com desmatamento passado
         # Selecionar patches apenas com floresta e desmatamento passado (Só 2 classes, sem desmatamento novo)
+        if len(old_deforest) > config['max_input_samples']:
+            old_deforest = random.sample(old_deforest, config['max_input_samples'])
         final_imgs = rej_pairs[old_deforest]
         selected_patches = rej_pairs_ref[old_deforest]
         # Na máscara: fazer dilate nas regiões de desmatamento passado para criar uma
@@ -116,10 +118,14 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
 
     if config['synthetic_input_mode'] == 3: # depois juntar com a de cima, 2
         # ideia 2 pt 2 - adicionando mais desmatamento novo em mascaras com baixa % desmatamento novo
+        if len(all_classes) > config['max_input_samples']:
+            all_classes = random.sample(all_classes, config['max_input_samples'])
         final_imgs = rej_pairs[all_classes]
         selected_patches = rej_pairs_ref[all_classes]
         final_refs = dilate_masks(selected_patches, config)
-        # essa abordagem ainda ta em desenvolvimento, nao usar
+    
+    #if config['synthetic_input_mode'] == 4:
+        # Gerando mascaras inéditas a partir de colagens de regiões de desmatamento novo e antigo
 
     return final_imgs, final_refs
 
@@ -138,9 +144,12 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
 
 def dilate_masks(masks_list, config):
     dilated_masks = []
+    i = 0
     for img_mask in masks_list:
         dilation = dilate_mask(img_mask, config)
         dilated_masks.append(dilation)
+        print(i)
+        i+=1
     return dilated_masks
 
 
@@ -161,7 +170,8 @@ def dilate_mask(img_mask, config):
     if config['synthetic_input_mode'] == 3:
         per_class_1 = 0. #calculate_percentage_of_class(img_mask)
         nb_interations = 1
-        while per_class_1 <= config['goal_percentage']:
+        while per_class_1 < config['goal_percentage']:
+            print('nb_interations:', nb_interations)
             dilation = cv2.dilate(img_mask, kernel, iterations = nb_interations) # borderValue deixou o processo mais lento
             soma = dilation + img_mask
             # operacao de soma: 
@@ -177,10 +187,10 @@ def dilate_mask(img_mask, config):
             dilation[soma == 2] = 1 
             dilation[soma == 3] = 1
             dilation[img_mask == 2] = 2 # onde era desmatamento velho deve continuar o sendo
-            per_class_1 = calculate_percentage_of_class(soma)
+            per_class_1 = calculate_percentage_of_class(dilation)
             nb_interations += 1
         print(nb_interations - 1, per_class_1)      
-        return result
+        return dilation
 
    
 def calculate_percentage_of_class(img_mask):
@@ -257,7 +267,7 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
             counter += 1
 
 
-def get_dataset(config):
+def get_dataset(config, full_image=False, do_filter_outliers=True):
     """
     input: config - a dict file with processing parameters
     output: image_stack, final_mask
@@ -286,13 +296,15 @@ def get_dataset(config):
     del sent2_2019_1, sent2_2019_2
     
     sent2_2019 = sent2_2019[:, :, config['channels']]
-    sent2_2019 = filter_outliers(sent2_2019.copy())
+    if do_filter_outliers:
+        sent2_2019 = filter_outliers(sent2_2019.copy())
     image_stack = sent2_2019
     del sent2_2019
 
     if config['change_detection']:
-        sent2_2018 = sent2_2018[:, :, config['channels']]  
-        sent2_2018 = filter_outliers(sent2_2018.copy()) 
+        sent2_2018 = sent2_2018[:, :, config['channels']] 
+        if do_filter_outliers: 
+            sent2_2018 = filter_outliers(sent2_2018.copy()) 
         image_stack = np.concatenate((sent2_2018, image_stack), axis=-1)
         del sent2_2018 #, sent2_2019
 
@@ -303,8 +315,9 @@ def get_dataset(config):
         final_mask[final_mask == 2] = 1
     print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
 
-    final_mask = final_mask[:config['lim_x'], :config['lim_y']]
-    image_stack = image_stack[:config['lim_x'], :config['lim_y'], :]
+    if not full_image:
+        final_mask = final_mask[:config['lim_x'], :config['lim_y']]
+        image_stack = image_stack[:config['lim_x'], :config['lim_y'], :]
     h_, w_, channels = image_stack.shape
     print('image_stack size: ', image_stack.shape)
 
@@ -607,7 +620,7 @@ def normalization(image, norm_type=1):
         scaler = MinMaxScaler(feature_range=(0, 1))
     if (norm_type == 3):
         scaler = MinMaxScaler(feature_range=(-1, 1))
-    scaler = scaler.fit(image_reshaped)
+    #scaler = scaler.fit(image_reshaped)
     image_normalized = scaler.fit_transform(image_reshaped)
     image_normalized1 = image_normalized.reshape(image.shape[0], image.shape[1], image.shape[2])
     return image_normalized1
