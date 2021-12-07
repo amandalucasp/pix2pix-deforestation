@@ -35,9 +35,9 @@ def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
 
     h, w, c = t1.shape
     combined = np.zeros(shape=(h,w*3,c), dtype=np.float32)
-    combined[:,:w,:] = t1
-    combined[:,w:w*2,:] = mask
-    combined[:,2*w:,:] = t2_img
+    combined[:,:w,config['debug_channels']] = t1[:,:,config['debug_channels']]
+    combined[:,w:w*2,config['debug_channels']] = mask[:,:,config['debug_channels']]
+    combined[:,2*w:,config['debug_channels']] = t2_img[:,:,config['debug_channels']]
 
     combined = (combined - np.min(combined))/np.ptp(combined)
     combined = img_as_ubyte(combined)
@@ -102,15 +102,15 @@ def random_jitter(input_image, real_image, NUM_CHANNELS=3):
 
 def load_npy_train(image_file):
   input_image, real_image = load_npy(image_file)
-  input_image, real_image = random_jitter(input_image, real_image)
-  input_image, real_image = normalize(input_image, real_image)
+  input_image, real_image = random_jitter(input_image, real_image, NUM_CHANNELS)
+  #input_image, real_image = normalize(input_image, real_image)
   return input_image, real_image
 
 
 def load_npy_test(image_file):
   input_image, real_image = load_npy(image_file)
   input_image, real_image = resize(input_image, real_image, IMG_HEIGHT, IMG_WIDTH)
-  input_image, real_image = normalize(input_image, real_image)
+  #input_image, real_image = normalize(input_image, real_image)
   return input_image, real_image
 
 
@@ -225,10 +225,11 @@ def generate_images(model, test_input, tar, filename=None):
   prediction = model(test_input, training=True)
   if filename:
     fig = plt.figure(figsize=(15, 15))
-    display_list = [cv2.cvtColor(test_input[0][:,:,:NUM_CHANNELS].numpy(), cv2.COLOR_BGR2RGB),
-                    cv2.cvtColor(test_input[0][:,:,NUM_CHANNELS:].numpy(), cv2.COLOR_BGR2RGB),
-                    cv2.cvtColor(tar[0].numpy(), cv2.COLOR_BGR2RGB),
-                    cv2.cvtColor(prediction[0].numpy(), cv2.COLOR_BGR2RGB)]
+    chans = [0, 1, 3, 10, 11, 13]
+    display_list = [cv2.cvtColor(test_input[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB),
+                    cv2.cvtColor(test_input[0].numpy()[:,:,chans[3:]], cv2.COLOR_BGR2RGB),
+                    cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB),
+                    cv2.cvtColor(prediction[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)]
     title = ['Input Image T1', 'Mask', 'Actual T2', 'Predicted T2']
     for i in range(4):
       plt.subplot(1, 4, i+1)

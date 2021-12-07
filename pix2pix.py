@@ -61,6 +61,8 @@ train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
 inp, re = load_npy(train_files[0])
 input_shape = inp.shape
 target_shape = re.shape
+print('input_shape:', input_shape, np.min(inp), np.max(inp))
+print('target_shape:', target_shape, np.min(re), np.max(re))
 
 # Dataset items used for training
 if 'buffer_size' in config:
@@ -208,14 +210,13 @@ else:
 print(generator.summary())
 gen_output = generator(inp[tf.newaxis, ...], training=False)
 fig = plt.figure()
-plt.imshow(gen_output[0, ...])
+plt.imshow(gen_output[0].numpy()[:,:,config['debug_channels']]*0.5 + 0.5)
 fig.savefig(output_folder + '/gen_output.png')
-
 loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
 def generator_loss(disc_generated_output, gen_output, target):
-  #gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
-  gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
+  gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
+  #gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
   l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
   total_gen_loss = (GAN_WEIGHT * gan_loss) + (LAMBDA * l1_loss)
   return total_gen_loss, gan_loss, l1_loss
@@ -268,8 +269,8 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64)
   # layer_5
   down4_pad = tf.keras.layers.ZeroPadding2D()(leaky_relu)  # (batch_size, 33, 33, 512) 17, 17, 256
   last = tf.keras.layers.Conv2D(1, 4, strides=1,
-                                kernel_initializer=initializer,
-                                activation='sigmoid')(down4_pad)
+                                kernel_initializer=initializer)(down4_pad)
+                                #activation='sigmoid')(down4_pad) # affine-layer
   
   return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
@@ -280,18 +281,18 @@ else:
   discriminator = Discriminator(input_shape, target_shape, ndf)
 disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
 fig = plt.figure()
-plt.imshow(disc_out[0, ..., -1], vmin=-20, vmax=20, cmap='RdBu_r')
+print(disc_out.shape, np.min(disc_out), np.max(disc_out))
+plt.imshow(disc_out[0].numpy()[..., -1]*255, vmin=-20, vmax=20, cmap='RdBu_r')
 plt.colorbar()
 fig.savefig(output_folder + '/disc_out.png')
 print(discriminator.summary())
 
 
-
 def discriminator_loss(disc_real_output, disc_generated_output):
-  #real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
-  #generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
-  #total_disc_loss = real_loss + generated_loss
-  total_disc_loss = tf.reduce_mean(-(tf.math.log(disc_real_output + EPS) + tf.math.log(1 - disc_generated_output + EPS))) # affine-layer
+  real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
+  generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
+  total_disc_loss = real_loss + generated_loss
+  #total_disc_loss = tf.reduce_mean(-(tf.math.log(disc_real_output + EPS) + tf.math.log(1 - disc_generated_output + EPS))) # affine-layer
   return total_disc_loss
 
 generator_optimizer = tf.keras.optimizers.Adam(config['lr'], beta_1=config['beta1'])
@@ -393,10 +394,11 @@ def plot_imgs(generator, test_ds, out_dir, counter):
   plot_list = []
   for inp, tar in test_ds.take(3):
     prediction = generate_images(generator, inp, tar)
-    plot_list.append(cv2.cvtColor(inp[0][:,:,:config['output_channels']].numpy(), cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(inp[0][:,:,config['output_channels']:].numpy(), cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(tar[0].numpy(), cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(prediction.numpy(), cv2.COLOR_BGR2RGB))
+    chans = [0, 1, 3, 10, 11, 13]
+    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
+    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans[3:]], cv2.COLOR_BGR2RGB))
+    plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
+    plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
     i+=1
   fig = plt.figure(figsize=(15, 15))
   title = ['T1', 'Mask', 'T2', 'Prediction']
