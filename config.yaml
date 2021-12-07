@@ -28,6 +28,8 @@ min_percentage: 2
 root_path: '../Sentinel2/' 
 # path to save patches
 output_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128_all_bands'
+load_scaler: False
+scaler_path: ''
 # limite utilizado das imagens de entrada -> image is (17729, 9202)
 lim_x: 17700 # 10000
 lim_y: 9200 # 7000
