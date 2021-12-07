@@ -213,37 +213,34 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
     h, w, c = patches_list[0].shape
 
     if config['change_detection']:
-        if not synthetic_input_pairs:
             # T1 + T2 + 3-classes mask
             for i in range(patches_list.shape[0]):
                 # combined will be: T1 - T2 - mask
-                combined = np.zeros(shape=(h,w*3,c//2))
-                combined[:,:w,:] = patches_list[i][:,:,:c//2]
-                combined[:,w:w*2,:] = patches_list[i][:,:,c//2:]
-                converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-                if config['type_norm'] == 0:
-                    # 0: forest, 1: new deforestation, 2: old deforestation
+                combined = np.zeros(shape=(h,w*3,c//2)) # 128x(128*3)xc//2
+                combined[:,:w,:] = patches_list[i][:,:,:c//2] # t1
+                if not synthetic_input_pairs:
+                    # if synthetic_input_pairs, T2 stays as zeros
+                    combined[:,w:w*2,:] = patches_list[i][:,:,c//2:] # t2
+                # mask
+                converted = np.expand_dims(patches_ref_list[i].copy(), axis=-1) # 128x128x1
+                while converted.shape[2] != c//2:
+                    converted = np.concatenate((converted, np.expand_dims(patches_ref_list[i].copy(),axis=-1)), axis=-1)
+                #converted = array_reference # 128x128x(c//2)
+
+                if config['type_norm'] == 0: 
                     converted[converted == 1] = 255/2
                     converted[converted == 2] = 255
+                if config['type_norm'] == 3:
+                    converted = converted - 1 # [0, 1, 2] => [-1, 0, 1]
                 combined[:,w*2:,:] = converted
+
                 np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
                 if config['debug_mode']:
-                    cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
-                counter += 1
-        else:
-            # T1 + blank + 3-classes mask
-            for i in range(patches_list.shape[0]):
-                # combined will be: T1 - blank - mask
-                combined = np.zeros(shape=(h,w*3,c//2))
-                combined[:,:w,:] = patches_list[i][:,:,:c//2]
-                converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-                if config['type_norm'] == 0:
-                    # 0: forest, 1: new deforestation, 2: old deforestation
-                    converted[converted == 1] = 255/2
-                    converted[converted == 2] = 255
-                combined[:,w*2:,:] = converted
-                np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
-                if config['debug_mode']:
+                    if len(config['channels']) > 3:
+                        combined = combined[:,:,config['debug_channels']]
+                    if config['type_norm'] != 0:
+                        combined = (combined + 1) * 127.5
+                        combined[:,w:w*2,:] = 0
                     cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
                 counter += 1
     else:
@@ -280,6 +277,7 @@ def get_dataset(config, full_image=False, do_filter_outliers=True):
     print('[*]Loading dataset')
     if config['change_detection']:
         # LOAD IMAGE T1
+        print('Loading images')
         sent2_2018_1 = load_tif_image(config['root_path'] + '2018_10m_b2348.tif').astype('float32')
         sent2_2018_2 = load_tif_image(config['root_path'] + '2018_20m_b5678a1112.tif').astype('float32')
         # Resize bands of 20m
@@ -297,6 +295,7 @@ def get_dataset(config, full_image=False, do_filter_outliers=True):
     
     sent2_2019 = sent2_2019[:, :, config['channels']]
     if do_filter_outliers:
+        print('Filtering outliers - 2019')
         sent2_2019 = filter_outliers(sent2_2019.copy())
     image_stack = sent2_2019
     del sent2_2019
@@ -304,6 +303,7 @@ def get_dataset(config, full_image=False, do_filter_outliers=True):
     if config['change_detection']:
         sent2_2018 = sent2_2018[:, :, config['channels']] 
         if do_filter_outliers: 
+            print('Filtering outliers - 2018')
             sent2_2018 = filter_outliers(sent2_2018.copy()) 
         image_stack = np.concatenate((sent2_2018, image_stack), axis=-1)
         del sent2_2018 #, sent2_2019
@@ -318,7 +318,7 @@ def get_dataset(config, full_image=False, do_filter_outliers=True):
     if not full_image:
         final_mask = final_mask[:config['lim_x'], :config['lim_y']]
         image_stack = image_stack[:config['lim_x'], :config['lim_y'], :]
-    h_, w_, channels = image_stack.shape
+
     print('image_stack size: ', image_stack.shape)
 
     return image_stack, final_mask
@@ -551,20 +551,13 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, stride, config):
         tile_img = image_array[x1:x2 + 1, y1:y2 + 1, :]
         tile_ref = image_ref[x1:x2 + 1, y1:y2 + 1]
         patches_img, patch_ref = extract_patches(tile_img, tile_ref, patch_size, stride)
-
         # descarta por %
         patches_img, patch_ref, rej_patches, rej_patches_ref = discard_patches_by_percentage(patches_img, patch_ref, config)
         # salva os patches rejeitados
         np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_img.npy', rej_patches) 
         np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref.npy', rej_patches_ref)
-        # todo separar por classes aqui ja?
-        #no_deforestation, new_deforest, old_deforest, only_deforest, all_classes, only_old_deforest, only_new_deforest = classify_masks(rej_patches_ref, save=True)
-        #save_npy_array(rej_patches[no_deforestation], rej_out_path + 'no_deforestation/' 'tile_' + str(num_tile) + '.npy')
-        #save_npy_array(rej_patches_ref[no_deforestation], rej_out_path + 'no_deforestation_ref.npy')
-
         patches_out.append(patches_img)
         label_out.append(patch_ref)
-
     patches_out = np.concatenate(patches_out)
     label_out = np.concatenate(label_out)
     return patches_out, label_out
@@ -610,6 +603,35 @@ def resize_image(image, height, width):
     return im_resized
 
 
+def normalize_img_array(image, norm_type = 1, scaler = None):
+    if image.ndim == 4:
+      image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
+    if image.ndim == 3:
+      image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
+
+    if scaler != None:
+      print('Fitting data to provided scaler...')
+    else:
+      print('No scaler was provided. Fitting scaler', str(norm_type), 'to data...')
+      if (norm_type == 1):
+          scaler = StandardScaler()
+      if (norm_type == 2):
+          scaler = MinMaxScaler(feature_range=(0,1))
+      if (norm_type == 3):
+          scaler = MinMaxScaler(feature_range=(-1,1))
+      if (norm_type == 4):
+          scaler = MinMaxScaler(feature_range=(0,2))
+      if (norm_type == 5):
+          scaler = MinMaxScaler(feature_range=(0,255))
+      scaler = scaler.fit(image_reshaped)
+    image_normalized = scaler.transform(image_reshaped)
+    if image.ndim == 4:
+      image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2], image.shape[3])
+    if image.ndim == 3:
+      image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2])
+    return image_normalized1, scaler
+
+
 def normalization(image, norm_type=1):
     image_reshaped = image.reshape((image.shape[0] * image.shape[1]), image.shape[2])
     if (norm_type == 0):
@@ -620,8 +642,8 @@ def normalization(image, norm_type=1):
         scaler = MinMaxScaler(feature_range=(0, 1))
     if (norm_type == 3):
         scaler = MinMaxScaler(feature_range=(-1, 1))
-    #scaler = scaler.fit(image_reshaped)
-    image_normalized = scaler.fit_transform(image_reshaped)
+    scaler = scaler.fit(image_reshaped)
+    image_normalized = scaler.transform(image_reshaped)
     image_normalized1 = image_normalized.reshape(image.shape[0], image.shape[1], image.shape[2])
     return image_normalized1
 

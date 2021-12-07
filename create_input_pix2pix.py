@@ -4,6 +4,7 @@ import skimage
 import time
 import glob
 import cv2
+import joblib
 import shutil
 import imageio
 import numpy as np
@@ -36,6 +37,10 @@ if len(rej_pairs) > config['max_input_samples']:
     rej_pairs = rej_pairs[:config['max_input_samples']]
     rej_pairs_ref = rej_pairs_ref[:config['max_input_samples']]
     print('=> Using the first', str(config['max_input_samples']), 'pairs.')
+
+# Normalization done with training patches stats
+preprocessing_scaler = joblib.load(config['output_path'] + '/minmax_scaler.bin')
+rej_pairs, _ = normalize_img_array(rej_pairs, config['type_norm'], scaler=preprocessing_scaler)
 
 print('[*] Processing masks...')
 final_pairs, final_pairs_ref = process_masks(rej_pairs, rej_pairs_ref, config)

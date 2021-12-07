@@ -3,6 +3,7 @@ import gdal
 import skimage
 import time
 import cv2
+import joblib
 import shutil
 import imageio
 import numpy as np
@@ -29,11 +30,8 @@ print(config)
 os.makedirs(config['output_path'], exist_ok=True)
 shutil.copy('./config.yaml', config['output_path'])
 
-image_stack, final_mask = get_dataset(config)
-
+image_array, final_mask = get_dataset(config)
 # Normalization
-image_array = normalization(image_stack.copy(), config['type_norm'])
-del image_stack
 
 # Print percentage of each class (whole image)
 print('Total no-deforestaion class is {}'.format(len(final_mask[final_mask==0])))
@@ -70,10 +68,14 @@ if config['save_tiles']:
         np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_ref.npy', tile_ref)
         if config['change_detection']:
             h, w, c = tile_img.shape
+            if c > 3:
+                chans = [0, 1, 3, 10, 11, 13]
+                tile_img = tile_img[:,:,chans]
             cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_t1.jpeg', tile_img[:,:,:c//2])
             cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_t2.jpeg', tile_img[:,:,c//2:])
         else:
             cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.jpeg', tile_img)
+
 
 ################### EXTRACT PATCHES
 
@@ -81,11 +83,21 @@ print("[*] EXTRACTING PATCHES")
 
 print('Extracting training patches')
 patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, stride, config)
+patches_trn, train_scaler = normalize_img_array(patches_trn, config['type_norm'])
 print('Extracting validation patches')
 patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, stride, config)
+patches_val, _ = normalize_img_array(patches_val, config['type_norm'], scaler=train_scaler)
 print('Extracting test patches')
 patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, stride, config)
+patches_tst, _ = normalize_img_array(patches_tst, config['type_norm'], scaler=train_scaler)
 del image_array, final_mask
+
+print('Checking normalized patches:')
+print(np.min(patches_trn), np.max(patches_trn))
+print(np.min(patches_val), np.max(patches_val))
+print(np.min(patches_tst), np.max(patches_tst))
+
+joblib.dump(train_scaler, config['output_path'] + '/minmax_scaler.bin', compress=True)
 
 print('[*] Training patches:', patches_trn.shape)
 print('[*] Validation patches:', patches_val.shape)
