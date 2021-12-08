@@ -82,15 +82,17 @@ if config['save_tiles']:
 print("[*] EXTRACTING PATCHES")
 
 print('Extracting training patches')
-patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, stride, config)
+patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, stride, config, save_rejected=True)
 if not config['load_scaler']:
     patches_trn, train_scaler = normalize_img_array(patches_trn, config['type_norm'])
+    joblib.dump(train_scaler, config['output_path'] + '/minmax_scaler.bin', compress=True)
 else:
+    print('Loading provided scaler:', config['scaler_path'])
     train_scaler = joblib.load(config['scaler_path'])
     patches_trn, _ = normalize_img_array(patches_trn, config['type_norm'], scaler=train_scaler)
 
 print('Extracting validation patches')
-patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, stride, config)
+patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, stride, config, save_rejected=True)
 patches_val, _ = normalize_img_array(patches_val, config['type_norm'], scaler=train_scaler)
 print('Extracting test patches')
 patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, stride, config)
@@ -102,13 +104,18 @@ print(np.min(patches_trn), np.max(patches_trn))
 print(np.min(patches_val), np.max(patches_val))
 print(np.min(patches_tst), np.max(patches_tst))
 
+if config['type_norm'] == 3: # normalizing between [-1, +1]
+    patches_trn_ref = patches_trn_ref - 1
+    patches_val_ref = patches_val_ref - 1
+    patches_tst_ref = patches_tst_ref - 1
+print('Ref values:', np.unique(patches_trn_ref), np.unique(patches_val_ref), np.unique(patches_tst_ref))
+
 print('Scaler params:')
 print(train_scaler.min_)
 print(train_scaler.scale_)
 print(train_scaler.data_min_)
 print(train_scaler.data_max_)
 print(train_scaler.data_range_)
-joblib.dump(train_scaler, config['output_path'] + '/minmax_scaler.bin', compress=True)
 
 print('[*] Training patches:', patches_trn.shape)
 print('[*] Validation patches:', patches_val.shape)

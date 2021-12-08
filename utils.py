@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from skimage.util import view_as_windows
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
+np.random.seed(0)
 
 def load_npy_files(files_list):
     npys_imgs = []
@@ -97,12 +98,12 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
 
         if len(new_deforest) != 0:
             # existem patches com desmatamento novo + floresta 
-            final_refs = np.random.choice(new_deforest, len(final_imgs))
+            final_refs = np.random.choice(new_deforest, len(final_imgs), replace=False)
         else:
             # nao existem patches com desmatamento novo + floresta, modifico patches de desmatamento antigo
             selected_patches = rej_pairs_ref[old_deforest]
             selected_patches[selected_patches == 2.] = 1 # desmatamento antigo ---> desmatamento novo
-            selected_pos = np.random.choice(len(selected_patches), len(final_imgs))
+            selected_pos = np.random.choice(len(selected_patches), len(final_imgs), replace=False)
             final_refs = selected_patches[selected_pos]
 
     if config['synthetic_input_mode'] == 2:
@@ -230,8 +231,6 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
                 if config['type_norm'] == 0: 
                     converted[converted == 1] = 255/2
                     converted[converted == 2] = 255
-                if config['type_norm'] == 3:
-                    converted = converted - 1 # [0, 1, 2] => [-1, 0, 1]
                 combined[:,w*2:,:] = converted
 
                 np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
@@ -531,7 +530,7 @@ def extract_patches(input_image, reference, patch_size, stride):
     return patches_array, patches_ref
 
 
-def patch_tiles(tiles, mask_amazon, image_array, image_ref, stride, config):
+def patch_tiles(tiles, mask_amazon, image_array, image_ref, stride, config, save_rejected=False):
     '''Extraction of image patches and labels '''
     patch_size = config['patch_size']
     rej_out_path = config['output_path'] + '/rejected_patches_npy/'
@@ -554,8 +553,9 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, stride, config):
         # descarta por %
         patches_img, patch_ref, rej_patches, rej_patches_ref = discard_patches_by_percentage(patches_img, patch_ref, config)
         # salva os patches rejeitados
-        np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_img.npy', rej_patches) 
-        np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref.npy', rej_patches_ref)
+        if save_rejected:
+            np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_img.npy', rej_patches) 
+            np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref.npy', rej_patches_ref)
         patches_out.append(patches_img)
         label_out.append(patch_ref)
     patches_out = np.concatenate(patches_out)
