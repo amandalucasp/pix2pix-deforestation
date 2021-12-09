@@ -46,6 +46,26 @@ def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
     np.save(saving_path + '/masks/' + filename + '.npy', mask)
 
 
+def load_npy_sample(npy_file):
+  image = np.load(npy_file)
+  w = image.shape[1]
+  w = w // 3
+  # image is T1 // T2 // mask
+  t1_image = image[:,:w, :]
+  t2_image = image[:,w:2*w,:]
+  mask_image = image[:,2*w:,:]
+
+  if BINARY_MASK:
+    mask_image[mask_image == 255] = 0
+
+  input_image = np.concatenate((t1_image, mask_image), axis=-1)
+  input_image = make_mask_2d(input_image)
+  real_image = t2_image
+  input_image = tf.cast(input_image, tf.float32)
+  real_image = tf.cast(real_image, tf.float32)
+  return input_image, real_image
+
+
 def load_npy(npy_file):
   image = np.load(npy_file)
   w = image.shape[1]
@@ -58,7 +78,7 @@ def load_npy(npy_file):
   if BINARY_MASK:
     mask_image[mask_image == 255] = 0
 
-  input_image = np.concatenate((t1_image, mask_image), axis=-1) #  t1 + mascara
+  input_image = np.concatenate((t1_image, mask_image), axis=-1)
   real_image = t2_image
   input_image = tf.cast(input_image, tf.float32)
   real_image = tf.cast(real_image, tf.float32)
@@ -100,10 +120,19 @@ def random_jitter(input_image, real_image, NUM_CHANNELS=3):
   return input_image, real_image
 
 
+def make_mask_2d(input_image):
+  # transform n-dimensional mask to 2-dimensional
+  # input: (patch_size, patch_size, c) -> t1 (c//2) + mask (c//2)
+  # output: (patch_size, patch_size, c//2 + 1) -> t1 (c//2) + mask (1)
+  t1, mask = tf.split(input_image, 2, axis=-1)
+  return tf.concat([t1, tf.expand_dims(mask[:,:,0], axis=-1)], axis=-1)
+
+
 def load_npy_train(image_file):
   input_image, real_image = load_npy(image_file)
   input_image, real_image = random_jitter(input_image, real_image, NUM_CHANNELS)
   #input_image, real_image = normalize(input_image, real_image)
+  input_image = make_mask_2d(input_image)
   return input_image, real_image
 
 
@@ -111,6 +140,7 @@ def load_npy_test(image_file):
   input_image, real_image = load_npy(image_file)
   input_image, real_image = resize(input_image, real_image, IMG_HEIGHT, IMG_WIDTH)
   #input_image, real_image = normalize(input_image, real_image)
+  input_image = make_mask_2d(input_image)
   return input_image, real_image
 
 
@@ -227,7 +257,7 @@ def generate_images(model, test_input, tar, filename=None):
     fig = plt.figure(figsize=(15, 15))
     chans = [0, 1, 3, 10, 11, 13]
     display_list = [cv2.cvtColor(test_input[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB),
-                    cv2.cvtColor(test_input[0].numpy()[:,:,chans[3:]], cv2.COLOR_BGR2RGB),
+                    cv2.cvtColor(test_input[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB),
                     cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB),
                     cv2.cvtColor(prediction[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)]
     title = ['Input Image T1', 'Mask', 'Actual T2', 'Predicted T2']

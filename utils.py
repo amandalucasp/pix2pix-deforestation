@@ -19,8 +19,7 @@ def load_npy_files(files_list):
     npys_imgs = []
     npys_refs = []
     i = 0
-    for img_file in files_list:
-
+    for img_file in files_list[:1]:
         start = time.time()
         npys_imgs.append(np.load(img_file))
         elapsed = time.time() - start
@@ -239,7 +238,8 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
                         combined = combined[:,:,config['debug_channels']]
                     if config['type_norm'] != 0:
                         combined = (combined + 1) * 127.5
-                        combined[:,w:w*2,:] = 0
+                        if not synthetic_input_pairs:
+                            combined[:,w:w*2,:] = 0
                     cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
                 counter += 1
     else:

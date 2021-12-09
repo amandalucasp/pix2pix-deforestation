@@ -16,6 +16,8 @@ from skimage.util import view_as_windows
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from utils import *
 
+np.random.seed(0)
+
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 start = time.time()
@@ -32,18 +34,29 @@ list_imgs = glob.glob(rej_out_path + '*_img.npy')
 
 print('[*] Reading files...')
 rej_pairs, rej_pairs_ref = load_npy_files(list_imgs)
-
-if len(rej_pairs) > config['max_input_samples']:
-    rej_pairs = rej_pairs[:config['max_input_samples']]
-    rej_pairs_ref = rej_pairs_ref[:config['max_input_samples']]
-    print('=> Using the first', str(config['max_input_samples']), 'pairs.')
-
-# Normalization done with training patches stats
-preprocessing_scaler = joblib.load(config['output_path'] + '/minmax_scaler.bin')
-rej_pairs, _ = normalize_img_array(rej_pairs, config['type_norm'], scaler=preprocessing_scaler)
+print(np.min(rej_pairs), np.max(rej_pairs))
+print(np.min(rej_pairs_ref), np.max(rej_pairs_ref))
 
 print('[*] Processing masks...')
 final_pairs, final_pairs_ref = process_masks(rej_pairs, rej_pairs_ref, config)
+
+if len(final_pairs) > config['max_input_samples']:
+    selected_pos = np.random.choice(len(final_pairs), config['max_input_samples'], replace=False)
+    final_pairs = final_pairs[selected_pos]
+    final_pairs_ref = final_pairs_ref[selected_pos]
+    print('=> Will save only randomly selected ', str(config['max_input_samples']), 'pairs.')
+
+print('[*] Normalizing pairs...')
+# Normalization done with training patches stats
+print('> Loading provided scaler:', config['scaler_path'])
+preprocessing_scaler = joblib.load(config['scaler_path'])
+final_pairs, _ = normalize_img_array(final_pairs, config['type_norm'], scaler=preprocessing_scaler)
+print('> Checking normalization:')
+print(np.min(final_pairs), np.max(final_pairs))
+if config['type_norm'] == 3:
+    final_pairs_ref = final_pairs_ref - 1
+print('> Ref values:', np.unique(final_pairs_ref))
+
 print('[*] Saving pairs...')
 save_image_pairs(final_pairs, final_pairs_ref, final_out_path, config, synthetic_input_pairs=True)
 elapsed_time = time.time() - start

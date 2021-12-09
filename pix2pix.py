@@ -35,6 +35,8 @@ output_folder = config['data_path'] + '/pix2pix/' + time_string
 os.makedirs(output_folder)
 shutil.copy('./config.yaml', output_folder)
 
+np.random.seed(0)
+
 BATCH_SIZE = config['batch_size']
 IMG_WIDTH = config['image_width']
 IMG_HEIGHT = config['image_height']
@@ -58,9 +60,9 @@ out_dir = output_folder + "/output_images/"
  
 train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
 
-inp, re = load_npy(train_files[0])
-input_shape = inp.shape
-target_shape = re.shape
+inp, re = load_npy_sample(train_files[0])
+input_shape = [inp.shape[0], inp.shape[1], config['output_channels'] + 1] # ex.: 128x128x10 + 1
+target_shape = re.shape # 128x128x10
 print('input_shape:', input_shape, np.min(inp), np.max(inp))
 print('target_shape:', target_shape, np.min(re), np.max(re))
 
@@ -396,7 +398,7 @@ def plot_imgs(generator, test_ds, out_dir, counter):
     prediction = generate_images(generator, inp, tar)
     chans = [0, 1, 3, 10, 11, 13]
     plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans[3:]], cv2.COLOR_BGR2RGB))
+    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB))
     plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
     plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
     i+=1
@@ -426,9 +428,10 @@ def fit(train_ds, test_ds, config):
         print('gen_l1_loss:', gen_l1_loss)
         print('disc_loss:', disc_loss)
       start = time.time()
-      plot_imgs(generator, test_ds, out_dir, counter)
-      counter +=1000
       print(f"Step: {step//1000}k")
+    if (step) % 5000 == 0:
+      plot_imgs(generator, test_ds, out_dir, counter)
+      counter +=5000
 
     if config['residual_generator']:
       gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = res_train_step(input_image, target, step)
