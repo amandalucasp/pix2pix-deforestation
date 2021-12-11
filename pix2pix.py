@@ -402,7 +402,7 @@ def plot_imgs(generator, test_ds, out_dir, counter):
     plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
     plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
     i+=1
-  fig = plt.figure(figsize=(15, 15))
+  fig = plt.figure()
   title = ['T1', 'Mask', 'T2', 'Prediction']
   columns = 4
   rows = 3
