@@ -33,11 +33,12 @@ def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
     mask = t1_mask[:,:,NUM_CHANNELS:]
     t1_t2 = np.concatenate((t1, t2_img), axis=-1)
 
+    mask_copy = mask.copy()
     h, w, c = t1.shape
-    combined = np.zeros(shape=(h,w*3,c), dtype=np.float32)
-    combined[:,:w,config['debug_channels']] = t1[:,:,config['debug_channels']]
-    combined[:,w:w*2,config['debug_channels']] = mask[:,:,config['debug_channels']]
-    combined[:,2*w:,config['debug_channels']] = t2_img[:,:,config['debug_channels']]
+    combined = np.zeros(shape=(h,w*3,3), dtype=np.float32)
+    combined[:,:w,:] = t1[:,:,config['debug_channels']]
+    combined[:,w:w*2,:] = cv2.cvtColor(mask_copy, cv2.COLOR_GRAY2RGB)
+    combined[:,2*w:,:] = t2_img.numpy()[:,:,config['debug_channels']]
 
     combined = (combined - np.min(combined))/np.ptp(combined)
     combined = img_as_ubyte(combined)

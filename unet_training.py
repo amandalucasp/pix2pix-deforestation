@@ -30,9 +30,11 @@ from skimage.filters import rank
 import skimage.morphology 
 
 from utils import *
+import joblib
 
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+np.random.seed(0)
 
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
@@ -67,6 +69,37 @@ if config['augment_data']:
 os.makedirs(output_folder, exist_ok = True)
 shutil.copy('./config.yaml', output_folder)
 
+#exp_path = 'output_2021-11-30_01-43-34_patchsize_128_batchsize_32_epochs_100_patience_10'
+#output_folder = config['unet_data_path'] + config['training_output_path'] + exp_path
+
+# Function to compute mAP
+def Area_under_the_curve(X, Y):
+    #X -> Recall
+    #Y -> Precision
+    dx = np.diff(X)
+    X_ = np.array([])
+    Y_ = np.array([])
+    
+    eps = 5e-3
+    for i in range(len(dx)):
+        if dx[i] > eps:
+            x0 = X[i]; x1 = X[i+1]
+            y0 = Y[i]; y1 = Y[i+1]
+            a = (y1 - y0) / (x1 - x0)
+            b = y0 - a * x0
+            x = np.arange(x0, x1, eps)
+            y = a * x + b                
+            X_ = np.concatenate((X_, x))
+            Y_ = np.concatenate((Y_, y))
+        else:
+            X_ = np.concatenate((X_, X[i:i+1]))
+            Y_ = np.concatenate((Y_, Y[i:i+1]))
+    X_ = np.concatenate((X_, X[-1:]))
+    Y_ = np.concatenate((Y_, Y[-1:]))
+    new_dx = np.diff(X_)
+    area = 100 * np.inner(Y_[:-1], new_dx)
+    return area
+
 
 def normalization_image(image, norm_type = 1):
     image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
@@ -91,7 +124,6 @@ def test_model(model, patch_test):
 
 
 def normalization_unet(image, norm_type = 1, scaler = None):
-
     if image.ndim == 4:
       image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
     if image.ndim == 3:
@@ -109,8 +141,9 @@ def normalization_unet(image, norm_type = 1, scaler = None):
           scaler = MinMaxScaler(feature_range=(-1,1))
       if (norm_type == 4):
           scaler = MinMaxScaler(feature_range=(0,2))
-      scaler = scaler.fit(image_reshaped) # todo retornar esse scaler do treino pra usar nos dados de validacao e teste
-    
+      if (norm_type == 5):
+          scaler = MinMaxScaler(feature_range=(0,255))
+      scaler = scaler.fit(image_reshaped)
     image_normalized = scaler.transform(image_reshaped)
     if image.ndim == 4:
       image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2], image.shape[3])
@@ -190,7 +223,7 @@ def data_augmentation(img, mask):
   return image, ref
 
 
-def load_patches(root_path, folder, from_pix2pix=False, augment_data=False, number_class=3):
+def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=1000, augment_data=False, number_class=3):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
   img_files = os.listdir(imgs_dir)
@@ -198,45 +231,34 @@ def load_patches(root_path, folder, from_pix2pix=False, augment_data=False, numb
   patches_ref = []
   selected_pos = np.arange(len(img_files))
 
-  if from_pix2pix and len(img_files) > 1000:
+  if from_pix2pix and len(img_files) > pix2pix_max_samples:
     print('[*]Loading input from pix2pix.', from_pix2pix)
-    np.random.seed(2020)
-    selected_pos = np.random.choice(len(img_files), 1000)
-
-  print('Some of the randomly chosen samples:', selected_pos[0:20])
+    selected_pos = np.random.choice(len(img_files), pix2pix_max_samples, replace=False)
+    print('Some of the randomly chosen samples:', selected_pos[0:20])
 
   for i in selected_pos:
     img_path = imgs_dir + img_files[i]
     mask_path = masks_dir + img_files[i]    
-    img = np.load(img_path)
+    img = np.load(img_path) 
     mask = np.load(mask_path)
-    if from_pix2pix: # todo consertar a parada na saida do pix2pixutils pra nao precisar disso aqui
-      mask = to_unet_format(mask)
     if augment_data and np.random.rand() > 0.5:
       img, mask = data_augmentation(img, mask)
-      #print('3:', img.shape, mask.shape)
-      #combined = np.zeros(shape=(h,w*3,c//2))
-      #combined[:,:w,:] = img[:,:,:3]
-      #combined[:,w:2*w,:] = img[:,:,3:]
-      #combined[:,2*w:,:] = 127.5*cv2.cvtColor(mask.copy(), cv2.COLOR_GRAY2BGR)
-      #cv2.imwrite(str(img_files[i].replace('.npy','_2.png')), combined)
     mask = tf.keras.utils.to_categorical(mask, number_class)
     patches.append(img)
     patches_ref.append(mask)
-  return np.array(patches), np.array(patches_ref)
+  
+  patches, patches_ref = to_unet_format(np.array(patches), np.array(patches_ref))
+  return patches, patches_ref
 
 
-def to_unet_format(mask):
-  # pix2pix is fed a 3-channels mask, but u-net expects a 1-channel mask
-  mask = mask[:,:,0]
-  # print(mask.shape)
-  #unique, counts = np.unique(mask, return_counts=True)
-  mask[mask == 1] = 2
-  mask[mask == 0] = 1
-  mask[mask == -1] = 0
-  #unique, counts = np.unique(mask, return_counts=True)
-  #print('to_unet_format:', unique, counts)
-  return mask
+def to_unet_format(img, mask):
+  # pix2pix generates a [-1, +1] output, but u-net expects [0, 1]
+  # [-1, 1] => [0, 1]
+  img = img + 1
+  # u-net expects a 1-channel mask
+  # [-1, 0, +1] => [0, 1, 2]
+  mask = mask + 1 
+  return img, mask
 
 
 def load_tiles(root_path, testing_tiles_dir, tiles_ts):
@@ -324,25 +346,35 @@ print('[*] Loading patches...')
 # Training patches
 print('[*] Loading training patches.')
 patches_train, patches_tr_ref = load_patches(root_path, training_dir, augment_data=config['augment_data']) # retorna np.array(patches), np.array(patches_ref)
-patches_train, train_scaler = normalization_unet(patches_train, norm_type = type_norm_unet)
+print('>train:', np.min(patches_train), np.max(patches_train))
 
 if config['synthetic_data_path'] != '':
   synt_data_path = config['synthetic_data_path']
-  patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], '', from_pix2pix=True)
+  patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], '', from_pix2pix=True, pix2pix_max_samples=config['pix2pix_max_samples'])
+  print('>pix2pix:', np.min(patches_train_synt), np.max(patches_train_synt))
   patches_train = np.concatenate((patches_train, patches_train_synt))
   patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))
+
+print('>>patches_train:', np.min(patches_train), np.max(patches_train))
 
 # Validation patches
 print('[*] Loading validation patches.')
 patches_val, patches_val_ref = load_patches(root_path, validation_dir, augment_data=config['augment_data'])
-patches_val, _ = normalization_unet(patches_val, norm_type = type_norm_unet, scaler = train_scaler)
-# Test patches
-print('[*] Loading testing patches.')
-patches_test, patches_test_ref = load_patches(root_path, testing_dir)
-patches_test, _ = normalization_unet(patches_test, norm_type = type_norm_unet, scaler = train_scaler)
+print('>val:', np.min(patches_val), np.max(patches_val))
+
 print('[*] Normalizing image array...')
-image_stack, final_mask = get_dataset(config)
-image_array = normalization_image(image_stack.copy(), norm_type = type_norm_unet) # , scaler = train_scaler)
+image_array, final_mask = get_dataset(config)
+# normalize image to [-1, +1] with the same scaler used in preprocessing
+print('> Loading provided scaler:', config['scaler_path'])
+preprocessing_scaler = joblib.load(config['scaler_path'])
+image_array, _ = normalize_img_array(image_array, config['type_norm'], scaler=preprocessing_scaler) # [-1, +1]
+# u-net expects input to be  [0, 1]. [-1, +1] => [0, 1]:
+image_array = image_array + 1
+print('>image_array:', np.min(image_array), np.max(image_array))
+
+#image_stack_1, _ = normalization_unet(image_stack.copy(), norm_type = 5) 
+#image_array, _ = normalization_unet(image_stack_1.copy(), norm_type = type_norm_unet, scaler = train_scaler)
+
 mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5, 4))
 print('[*] Creating padded image...')
 n_pool = 3
@@ -363,24 +395,25 @@ input_shape=(patch_size_rows,patch_size_cols, c)
 
 print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.shape))
 print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))
-print("[*] Patches for Testing:", str(patches_test.shape), str(patches_test_ref.shape))
 
 patches_val_lb_h = patches_val_ref 
-patches_te_lb_h = patches_test_ref 
 patches_tr_lb_h = patches_tr_ref 
 
 if config['augment_data']:
   data_gen_args = dict(horizontal_flip = True, vertical_flip = True)
-
   patches_train_datagen = ImageDataGenerator(data_gen_args)
   patches_train_ref_datagen = ImageDataGenerator(data_gen_args)
-
   patches_valid_datagen = ImageDataGenerator(data_gen_args)
   patches_valid_ref_datagen = ImageDataGenerator(data_gen_args)
-
+  steps_per_epoch = len(patches_train)*3//config['batch_size_unet']
+  validation_steps = len(patches_val)*3//config['batch_size_unet']
 else:
-  train_datagen = ImageDataGenerator()
-  valid_datagen = ImageDataGenerator()
+  patches_train_datagen = ImageDataGenerator()
+  patches_train_ref_datagen = ImageDataGenerator()
+  patches_valid_datagen = ImageDataGenerator()
+  patches_valid_ref_datagen = ImageDataGenerator()
+  steps_per_epoch = len(patches_train)//config['batch_size_unet']
+  validation_steps = len(patches_val)//config['batch_size_unet']
 
 seed = 1
 patches_train_generator = patches_train_datagen.flow(patches_train, batch_size=batch_size, shuffle=True, seed=seed)
@@ -417,9 +450,8 @@ if not os.path.exists(path_models):
 if not os.path.exists(path_maps):
     os.makedirs(path_maps)
 
-steps_per_epoch = len(patches_train)*3//config['batch_size_unet']
-validation_steps = len(patches_val)*3//config['batch_size_unet']
 epochs = config['epochs_unet']
+
 
 for run in range(0, number_runs):
   print('[*] Start training', str(run))
@@ -521,12 +553,6 @@ fig.savefig(output_folder + '/mean_map_and_ref.png')
 
 mean_prob = mean_prob[:final_mask.shape[0], :final_mask.shape[1]]
 
-# print(tiles_ts.shape)
-print(mask_tiles.shape)
-print(mean_prob.shape)
-
-print('=>final_mask unique values:', np.unique(final_mask))
-
 mask_amazon_ts = np.zeros((mask_tiles.shape)).astype('float32')
 for ts_ in tiles_ts:
     mask_amazon_ts[mask_tiles == ts_] = 1
@@ -536,7 +562,7 @@ ref1 [final_mask == 2] = 0
 TileMask = mask_amazon_ts * ref1
 GTTruePositives = final_mask==1
 
-Npoints = 10
+Npoints = 50
 Pmax = np.max(mean_prob[GTTruePositives * TileMask ==1])
 ProbList = np.linspace(Pmax,0,Npoints)
 
@@ -555,7 +581,12 @@ AA = metrics_copy[:,2]
 DeltaR = Recall[1:]-Recall[:-1]
 AP = np.sum(Precision[:-1]*DeltaR)
 print(output_folder)
-print('mAP', AP)
+print('mAP:', AP)
+
+#X -> Recall
+#Y -> Precision
+mAP_func = Area_under_the_curve(Recall, Precision)
+print('mAP_func:', mAP_func)
 
 # Plot Recall vs. Precision curve
 plt.close('all')
