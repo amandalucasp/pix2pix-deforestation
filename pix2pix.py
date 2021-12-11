@@ -217,8 +217,8 @@ fig.savefig(output_folder + '/gen_output.png')
 loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
 def generator_loss(disc_generated_output, gen_output, target):
-  gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
-  #gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
+  #gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
+  gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
   l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
   total_gen_loss = (GAN_WEIGHT * gan_loss) + (LAMBDA * l1_loss)
   return total_gen_loss, gan_loss, l1_loss
@@ -271,8 +271,8 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64)
   # layer_5
   down4_pad = tf.keras.layers.ZeroPadding2D()(leaky_relu)  # (batch_size, 33, 33, 512) 17, 17, 256
   last = tf.keras.layers.Conv2D(1, 4, strides=1,
-                                kernel_initializer=initializer)(down4_pad)
-                                #activation='sigmoid')(down4_pad) # affine-layer
+                                kernel_initializer=initializer, #(down4_pad)
+                                activation='sigmoid')(down4_pad) # affine-layer
   
   return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
@@ -291,10 +291,10 @@ print(discriminator.summary())
 
 
 def discriminator_loss(disc_real_output, disc_generated_output):
-  real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
-  generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
-  total_disc_loss = real_loss + generated_loss
-  #total_disc_loss = tf.reduce_mean(-(tf.math.log(disc_real_output + EPS) + tf.math.log(1 - disc_generated_output + EPS))) # affine-layer
+  #real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
+  #generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
+  #total_disc_loss = real_loss + generated_loss
+  total_disc_loss = tf.reduce_mean(-(tf.math.log(disc_real_output + EPS) + tf.math.log(1 - disc_generated_output + EPS))) # affine-layer
   return total_disc_loss
 
 generator_optimizer = tf.keras.optimizers.Adam(config['lr'], beta_1=config['beta1'])
@@ -308,7 +308,6 @@ checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
 
 for example_input, example_target in test_ds.take(1):
   generate_images(generator, example_input, example_target, output_folder + '/sample.png')
-
 
 def cross_entropy_loss(labels, logits):
     loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels))
@@ -402,7 +401,7 @@ def plot_imgs(generator, test_ds, out_dir, counter):
     plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
     plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
     i+=1
-  fig = plt.figure(figsize=(15, 15))
+  fig = plt.figure()
   title = ['T1', 'Mask', 'T2', 'Prediction']
   columns = 4
   rows = 3
@@ -455,6 +454,7 @@ if args.train:
   os.makedirs(output_folder + '/generated_plots_test/')
   synthetic_path = output_folder + '/synthetic_data_test/'
 
+  print('Saving test data plots')
   counter = 0
   for inp, tar in test_ds:
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_test/' + str(counter) + '.png')
@@ -473,9 +473,9 @@ if args.train:
   os.makedirs(output_folder + '/generated_plots_random/')
   synthetic_path = output_folder + '/synthetic_data_random/'
 
+  print('Saving synthetic plots')
   counter = 0
   for inp, tar in pix2pix_input_ds:
-    print(inp.shape, inp[0].shape) # ver de tirar esse [0]
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
     save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
     counter+=1
