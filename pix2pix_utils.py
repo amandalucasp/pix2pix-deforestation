@@ -255,7 +255,7 @@ def residual_block_v1(filters, size, apply_batchnorm=True, padding_mode='same'):
 def generate_images(model, test_input, tar, filename=None):
   prediction = model(test_input, training=True)
   if filename:
-    fig = plt.figure(figsize=(15, 15))
+    fig = plt.figure()
     chans = [0, 1, 3, 10, 11, 13]
     display_list = [cv2.cvtColor(test_input[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB),
                     cv2.cvtColor(test_input[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB),
