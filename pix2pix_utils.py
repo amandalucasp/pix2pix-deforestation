@@ -268,6 +268,9 @@ def generate_images(model, test_input, tar, filename=None):
       # Getting the pixel values in the [0, 1] range to plot.
       plt.imshow(display_list[i] * 0.5 + 0.5)
       plt.axis('off')
+    plt.tick_params(left = False, right = False , labelleft = False ,
+                labelbottom = False, bottom = False)
+    plt.tight_layout(pad=1)
     fig.savefig(filename)
     plt.close(fig)
   return prediction[0]

@@ -389,7 +389,6 @@ def train_step(input_image, target, step):
 
   return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss
 
-
 def plot_imgs(generator, test_ds, out_dir, counter):
   i = 0
   plot_list = []
@@ -402,16 +401,15 @@ def plot_imgs(generator, test_ds, out_dir, counter):
     plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
     i+=1
   fig = plt.figure()
-  title = ['T1', 'Mask', 'T2', 'Prediction']
   columns = 4
   rows = 3
   for i in range(0, columns*rows):
     fig.add_subplot(rows, columns, i + 1)
+    plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
     plt.imshow(plot_list[i]  * 0.5 + 0.5)
+  fig.tight_layout(pad=1)
   fig.savefig(out_dir + str(counter) + '.png')
-  plt.title(title)
   plt.close(fig)
-
 
 def fit(train_ds, test_ds, config):
   # example_input, example_target = next(iter(test_ds.take(1)))
