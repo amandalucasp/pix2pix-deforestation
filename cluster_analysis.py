@@ -1,13 +1,20 @@
-from sklearn.model_selection import train_test_split
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics.pairwise import pairwise_distances_argmin
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix
 from sklearn.cluster import KMeans
 from factor_analyzer import FactorAnalyzer
+
+import matplotlib as mpl
+mpl.rcParams['agg.path.chunksize'] = 10000
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
 from utils import *
 import sklearn
+import imageio
 import yaml
 import time
 import cv2
@@ -106,6 +113,61 @@ def get_cols_names(n_factors):
     return cols
 
 
+def bench_k_means(kmeans, name, data, labels):
+    # https://scikit-learn.org/stable/auto_examples/cluster/plot_kmeans_digits.html
+    """Benchmark to evaluate the KMeans initialization methods.
+
+    Parameters
+    ----------
+    kmeans : KMeans instance
+        A :class:`~sklearn.cluster.KMeans` instance with the initialization
+        already set.
+    name : str
+        Name given to the strategy. It will be used to show the results in a
+        table.
+    data : ndarray of shape (n_samples, n_features)
+        The data to cluster.
+    labels : ndarray of shape (n_samples,)
+        The labels used to compute the clustering metrics which requires some
+        supervision.
+    """
+    t0 = time.time()
+    estimator = kmeans.fit(data)
+    fit_time = time.time() - t0
+    results = [name, fit_time, estimator.inertia_]
+
+    # Define the metrics which require only the true labels and estimator
+    # labels
+    clustering_metrics = [
+        sklearn.metrics.homogeneity_score,
+        sklearn.metrics.completeness_score,
+        sklearn.metrics.v_measure_score,
+        sklearn.metrics.adjusted_rand_score,
+        sklearn.metrics.adjusted_mutual_info_score,
+    ]
+    results += [m(labels, estimator.labels_) for m in clustering_metrics]
+
+    # The silhouette score requires the full dataset
+    results += [
+        sklearn.metrics.silhouette_score(
+            data,
+            estimator.labels_,
+            metric="euclidean",
+            sample_size=300,
+        )
+    ]
+
+    # Show the results
+    formatter_result = (
+        "{:9s}\t{:.3f}s\t{:.0f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}"
+    )
+    print('\n')
+    print("init\t\ttime\tinertia\thomo\tcompl\tv-meas\tARI\tAMI\tsilhouette")
+    print(formatter_result.format(*results))
+
+    return estimator
+
+
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 stream = open('./cluster_config.yaml')
@@ -116,8 +178,10 @@ tiles = [1] #np.arange(1,21)
 output_folder = cluster_config['output_folder']
 os.makedirs(output_folder, exist_ok = True)
 n_factors = cluster_config['n_factors']
+n_classes = cluster_config['n_classes']
 
 df = get_df(config, cluster_config)
+print('>> Length of input dataframe:', len(df.index))
 
 #### SPLIT DATASET
 df_train, df_test = train_test_split(df, test_size=0.3, random_state=42, shuffle=True)
@@ -131,6 +195,9 @@ scaler = sklearn.preprocessing.StandardScaler()
 scaler.fit(x_train)
 scaled_x_train = pd.DataFrame(scaler.transform(x_train), columns=x_train.columns)
 scaled_x_test = pd.DataFrame(scaler.transform(x_test), columns=x_test.columns)
+
+scaled_df = df.drop(columns=['Classe','i','j'])
+scaled_df = pd.DataFrame(scaler.transform(scaled_df), columns=scaled_df.columns)
 print(scaled_x_train.columns)
 
 #### FACTOR ANALYSIS
@@ -198,10 +265,91 @@ else:
     # GET FACTOR SCORES FOR THE DATA
     features_train = fa.transform(scaled_x_train)
     features_test = fa.transform(scaled_x_test)
+    features_complete = fa.transform(scaled_df)
 
 #### CLUSTERING
 print('features_train:', features_train.shape)
 
+# KMeans
+print(82 * "_")
+kmeans = KMeans(init="random", n_clusters=n_classes, n_init=4, random_state=42)
+estimator = bench_k_means(kmeans=kmeans, name="random", data=features_train, labels=y_train)
+print(82 * "_")
+
+# Visualization of clusters on Test Data
+fig = plt.figure()
+colors = ["#4EACC5", "#FF9C34", "#4E9A06"]
+k_means_cluster_centers = estimator.cluster_centers_
+k_means_labels = pairwise_distances_argmin(features_test, k_means_cluster_centers)
+
+ax = fig.add_subplot(1, 1, 1)
+for k, col in zip(range(n_classes), colors):
+    my_members = k_means_labels == k
+    ax.plot(features_test[my_members, 0], features_test[my_members, 1], "w", markerfacecolor=col, marker=".")
+for k, col in zip(range(n_classes), colors):
+    cluster_center = k_means_cluster_centers[k]
+    ax.plot(
+        cluster_center[0],
+        cluster_center[1],
+        "o",
+        markerfacecolor=col,
+        markeredgecolor="k",
+        markersize=6,
+    )
+ax.set_title("KMeans")
+ax.set_xticks(())
+ax.set_yticks(())
+plt.show()
+fig.savefig(output_folder + 'kmeans.png')
+plt.close(fig)
+
+# Ground Truth
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+for k, col in zip(range(n_classes), colors):
+    my_members = y_test == k
+    ax.plot(features_test[my_members, 0], features_test[my_members, 1], "w", markerfacecolor=col, marker=".")
+ax.set_title("Ground Truth")
+ax.set_xticks(())
+ax.set_yticks(())
+plt.show()
+fig.savefig(output_folder + 'ground_truth.png')
+plt.close(fig)
+
+# Confusion Matrix
+cm = confusion_matrix(y_test, k_means_labels)
+fig, ax = plt.subplots(figsize=plt.figaspect(.5))
+ax = sns.heatmap(cm.T, square=True, annot=True, fmt='d', cbar=False,
+            xticklabels=[0, 1, 2],
+            yticklabels=[0, 1, 2])
+ax.set_xlabel('true label')
+ax.set_ylabel('predicted label')
+plt.show()
+fig.savefig(output_folder + 'confusion_matrix.png')
+plt.close(fig)
+
+# Create Output Image
+scaled_df['Classe'] = df['Classe']
+scaled_df['i'] = df['i']
+scaled_df['j'] = df['j']
+print(scaled_df.head())
+
+num_rows = scaled_df.i.max() - scaled_df.i.min() + 1
+num_cols = scaled_df.j.max() - scaled_df.j.min() + 1
+prediction_image = np.zeros(shape=(num_rows, num_cols, 1))
+gt_image = np.np.zeros(shape=(num_rows, num_cols, 1))
+k_means_labels = pairwise_distances_argmin(features_complete, k_means_cluster_centers)
+scaled_df['k_means_labels'] = k_means_labels
+
+print('Creating output image')
+for (index, row) in scaled_df.iterrows():
+    prediction_image[int(row['i']), int(row['j'])] = int(row['k_means_labels'])
+    gt_image[int(row['i']), int(row['j'])] = int(row['Classe'])
+
+prediction_image = cv2.cvtColor(prediction_image.astype('uint8'), cv2.COLOR_GRAY2RGB)
+gt_image = cv2.cvtColor(gt_image.astype('uint8'), cv2.COLOR_GRAY2RGB)
+imageio.imwrite(output_folder + 'prediction.png', prediction_image*127.5)
+imageio.imwrite(output_folder + 'gt_image.png', gt_image*127.5)
+
 
 #LinearDiscriminantAnalysis
-#KMeans
