@@ -241,20 +241,19 @@ def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=1000
     mask_path = masks_dir + img_files[i]    
     img = np.load(img_path) 
     mask = np.load(mask_path)
+    img, mask = to_unet_format(img, mask)
     if augment_data and np.random.rand() > 0.5:
       img, mask = data_augmentation(img, mask)
-    mask = tf.keras.utils.to_categorical(mask, number_class)
     patches.append(img)
     patches_ref.append(mask)
   
-  patches, patches_ref = to_unet_format(np.array(patches), np.array(patches_ref))
-  return patches, patches_ref
+  return np.array(patches), np.squeeze(np.array(patches_ref))
 
 
 def to_unet_format(img, mask):
   # pix2pix generates a [-1, +1] output, but u-net expects [0, 1]
-  # [-1, 1] => [0, 1]
-  img = img + 1
+  # [-1, 1] => [0, 2]
+  img = img*0.5 + 0.5
   # u-net expects a 1-channel mask
   # [-1, 0, +1] => [0, 1, 2]
   mask = mask + 1 
@@ -346,7 +345,7 @@ print('[*] Loading patches...')
 # Training patches
 print('[*] Loading training patches.')
 patches_train, patches_tr_ref = load_patches(root_path, training_dir, augment_data=config['augment_data']) # retorna np.array(patches), np.array(patches_ref)
-print('>train:', np.min(patches_train), np.max(patches_train))
+print('>train:', np.unique(patches_train),  np.unique(patches_tr_ref))
 
 if config['synthetic_data_path'] != '':
   synt_data_path = config['synthetic_data_path']
@@ -355,12 +354,11 @@ if config['synthetic_data_path'] != '':
   patches_train = np.concatenate((patches_train, patches_train_synt))
   patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))
 
-print('>>patches_train:', np.min(patches_train), np.max(patches_train))
-
+print('>>patches_train:', np.unique(patches_train),  np.unique(patches_tr_ref))
 # Validation patches
 print('[*] Loading validation patches.')
 patches_val, patches_val_ref = load_patches(root_path, validation_dir, augment_data=config['augment_data'])
-print('>val:', np.min(patches_val), np.max(patches_val))
+print('>val:', np.unique(patches_val),  np.unique(patches_val_ref))
 
 print('[*] Normalizing image array...')
 image_array, final_mask = get_dataset(config)
@@ -369,11 +367,8 @@ print('> Loading provided scaler:', config['scaler_path'])
 preprocessing_scaler = joblib.load(config['scaler_path'])
 image_array, _ = normalize_img_array(image_array, config['type_norm'], scaler=preprocessing_scaler) # [-1, +1]
 # u-net expects input to be  [0, 1]. [-1, +1] => [0, 1]:
-image_array = image_array + 1
+image_array = image_array*0.5 + 0.5
 print('>image_array:', np.min(image_array), np.max(image_array))
-
-#image_stack_1, _ = normalization_unet(image_stack.copy(), norm_type = 5) 
-#image_array, _ = normalization_unet(image_stack_1.copy(), norm_type = type_norm_unet, scaler = train_scaler)
 
 mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5, 4))
 print('[*] Creating padded image...')
@@ -396,11 +391,11 @@ input_shape=(patch_size_rows,patch_size_cols, c)
 print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.shape))
 print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))
 
-patches_val_lb_h = patches_val_ref 
-patches_tr_lb_h = patches_tr_ref 
+patches_val_lb_h = tf.keras.utils.to_categorical(patches_val_ref, number_class)
+patches_tr_lb_h = tf.keras.utils.to_categorical(patches_tr_ref, number_class)
 
 if config['augment_data']:
-  data_gen_args = dict(horizontal_flip = True, vertical_flip = True)
+  data_gen_args = dict(horizontal_flip = True, vertical_flip = True, featurewise_center=False)
   patches_train_datagen = ImageDataGenerator(data_gen_args)
   patches_train_ref_datagen = ImageDataGenerator(data_gen_args)
   patches_valid_datagen = ImageDataGenerator(data_gen_args)
@@ -414,6 +409,8 @@ else:
   patches_valid_ref_datagen = ImageDataGenerator()
   steps_per_epoch = len(patches_train)//config['batch_size_unet']
   validation_steps = len(patches_val)//config['batch_size_unet']
+
+print('ImageDataGenerator:', ImageDataGenerator)
 
 seed = 1
 patches_train_generator = patches_train_datagen.flow(patches_train, batch_size=batch_size, shuffle=True, seed=seed)
@@ -562,7 +559,7 @@ ref1 [final_mask == 2] = 0
 TileMask = mask_amazon_ts * ref1
 GTTruePositives = final_mask==1
 
-Npoints = 50
+Npoints = 10
 Pmax = np.max(mean_prob[GTTruePositives * TileMask ==1])
 ProbList = np.linspace(Pmax,0,Npoints)
 

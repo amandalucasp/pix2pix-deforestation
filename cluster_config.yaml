@@ -1,6 +1,9 @@
 create_df: False
-include_dif: False
+include_dif: True
 use_only_dif: False
 channels: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] 
-output_folder: '/share_alpha_2/amandalucas/cluster_analysis/exp1/'
-n_factors: 3 # empty to perform EFA
+tiles_tr: [1]
+tiles_tst: [2]
+output_folder: '/share_alpha_2/amandalucas/cluster_analysis/exp'
+n_factors: 4 # empty to perform EFA
+n_classes: 2

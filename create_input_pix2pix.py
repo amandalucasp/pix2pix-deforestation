@@ -22,6 +22,8 @@ stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 start = time.time()
 
+config['output_path'] = '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128_all_bands'
+
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
 print(config)
 
