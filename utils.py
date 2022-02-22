@@ -79,7 +79,6 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
     '''
     faz o processamento das mascaras que serao passadas como entrada (junto com T1) para o gerador treinado.
     rej_pairs_ref: mascaras dos pares que foram rejeitados durante o pre-processamento
-    rej_percentage: % de desmatamento novo (classe 1) em cada mascara
     '''
     if config['synthetic_input_mode'] == 0:
         # faz nada, retorna os pares (img+mask) originais
@@ -223,6 +222,8 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
                     combined[:,w:w*2,:] = patches_list[i][:,:,c//2:] # t2
                 # mask
                 converted = np.expand_dims(patches_ref_list[i].copy(), axis=-1) # 128x128x1
+
+                # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
                 while converted.shape[2] != c//2:
                     converted = np.concatenate((converted, np.expand_dims(patches_ref_list[i].copy(),axis=-1)), axis=-1)
                 #converted = array_reference # 128x128x(c//2)
@@ -243,7 +244,7 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
                     cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
                 counter += 1
     else:
-        # T2 only
+        # T2 only - only segmentation
         for i in range(patches_list.shape[0]):
             combined = np.zeros(shape=(h,w*2,c))
             combined[:,:w,:] = patches_list[i]
@@ -272,18 +273,7 @@ def get_dataset(config, full_image=False, do_filter_outliers=True):
         - two_classes_problem = False:
             image_stack: T1 + T2 (concat); final_mask: 3-classes mask;  
     """
-
-    print('[*]Loading dataset')
-    if config['change_detection']:
-        # LOAD IMAGE T1
-        print('Loading images')
-        sent2_2018_1 = load_tif_image(config['root_path'] + '2018_10m_b2348.tif').astype('float32')
-        sent2_2018_2 = load_tif_image(config['root_path'] + '2018_20m_b5678a1112.tif').astype('float32')
-        # Resize bands of 20m
-        sent2_2018_2 = resize_image(sent2_2018_2.copy(), sent2_2018_1.shape[0], sent2_2018_1.shape[1])
-        sent2_2018 = np.concatenate((sent2_2018_1, sent2_2018_2), axis=-1)
-        del sent2_2018_1, sent2_2018_2
-
+    print('[*]Loading T2')
     # LOAD IMAGE T2
     sent2_2019_1 = load_tif_image(config['root_path'] + '2019_10m_b2348.tif').astype('float32')
     sent2_2019_2 = load_tif_image(config['root_path'] + '2019_20m_b5678a1112.tif').astype('float32')
@@ -294,33 +284,32 @@ def get_dataset(config, full_image=False, do_filter_outliers=True):
     
     sent2_2019 = sent2_2019[:, :, config['channels']]
     if do_filter_outliers:
-        print('Filtering outliers - 2019')
+        print('Filtering outliers')
         sent2_2019 = filter_outliers(sent2_2019.copy())
-    image_stack = sent2_2019
-    del sent2_2019
 
-    if config['change_detection']:
-        sent2_2018 = sent2_2018[:, :, config['channels']] 
-        if do_filter_outliers: 
-            print('Filtering outliers - 2018')
-            sent2_2018 = filter_outliers(sent2_2018.copy()) 
-        image_stack = np.concatenate((sent2_2018, image_stack), axis=-1)
-        del sent2_2018 #, sent2_2019
-
-    final_mask = np.load(config['root_path']+'final_mask_label.npy').astype('float32')
-    # 0: forest, 1: new deforestation, 2: old deforestation
-    # change into only forest and deforestation:
-    if config['two_classes_problem']:
-        final_mask[final_mask == 2] = 1
-    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
+    # loading reference 2019 (t2)
+    current_def = load_tif_image(config['root_path'] + 'r10m_def_2019.tif').astype('int')
+    final_mask = np.copy(current_def)
+    # inverting reference
+    current_def = (np.logical_not(current_def.copy()))*1
+    print(current_def.shape, np.unique(current_def))
+    # number of channels
+    channels = sent2_2019.shape[-1]
+    print(channels)
+    current_def_matrix = np.repeat(np.expand_dims(current_def, axis = -1), channels, axis=-1)
+    print(current_def_matrix.shape)
+    # multiplying the s2 image with the current deforestation mask
+    s2_t2_with_mask = sent2_2019 * current_def_matrix
+    # visualization
+    s2_t2_with_mask_vis = normalization(s2_t2_with_mask.copy(), norm_type = 2)
+    cv2.imwrite(config['output_path'] + 's2_t2_with_mask.jpg', s2_t2_with_mask_vis[:,:,[2,1,0]])
 
     if not full_image:
-        final_mask = final_mask[:config['lim_x'], :config['lim_y']]
-        image_stack = image_stack[:config['lim_x'], :config['lim_y'], :]
+        s2_t2_with_mask = s2_t2_with_mask[:config['lim_x'], :config['lim_y']]
 
-    print('image_stack size: ', image_stack.shape)
+    print('s2_t2_with_mask size: ', s2_t2_with_mask.shape)
 
-    return image_stack, final_mask
+    return s2_t2_with_mask, final_mask
 
 
 def check_patch_class(patch):
@@ -608,6 +597,10 @@ def normalize_img_array(image, norm_type = 1, scaler = None):
       image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
     if image.ndim == 3:
       image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
+
+    # filtrar os pontos da mascara la 
+    imgn = np.where(img>0, img, np.nan)
+    img_norm = (img - np.nanmean(imgn,axis=(0,1)))/np.nanstd(imgn,axis=(0,1))
 
     if scaler != None:
       print('Fitting data to provided scaler...')

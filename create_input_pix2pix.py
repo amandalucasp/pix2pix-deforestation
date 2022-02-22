@@ -1,19 +1,12 @@
 import yaml
-import gdal
-import skimage
 import time
 import glob
-import cv2
 import joblib
 import shutil
-import imageio
 import numpy as np
 from PIL import Image
-import sys, os, platform
-from scipy import ndimage
+import os
 import matplotlib.pyplot as plt
-from skimage.util import view_as_windows
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from utils import *
 
 np.random.seed(0)

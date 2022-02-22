@@ -1,16 +1,14 @@
 #from SpectralNormalizationKeras import ConvSN2D
-from datetime import datetime, timedelta
+from datetime import datetime
 from matplotlib import pyplot as plt
 import tensorflow as tf
 import numpy as np
 import argparse
 import pathlib
-import imageio
 import shutil
 import glob
 import yaml
 import time
-import cv2
 import os
 
 import warnings
@@ -209,6 +207,7 @@ if config['residual_generator']:
 else:
   generator = Generator(input_shape, ngf, config['residual_generator'],
                       config['number_residuals'], config['drop_blocs'])
+
 print(generator.summary())
 gen_output = generator(inp[tf.newaxis, ...], training=False)
 fig = plt.figure()
@@ -282,13 +281,13 @@ if config['residual_generator']:
 else:
   discriminator = Discriminator(input_shape, target_shape, ndf)
 disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
+
 fig = plt.figure()
 print(disc_out.shape, np.min(disc_out), np.max(disc_out))
 plt.imshow(disc_out[0].numpy()[..., -1]*255, vmin=-20, vmax=20, cmap='RdBu_r')
 plt.colorbar()
 fig.savefig(output_folder + '/disc_out.png')
 print(discriminator.summary())
-
 
 def discriminator_loss(disc_real_output, disc_generated_output):
   real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
@@ -308,19 +307,6 @@ checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
 
 for example_input, example_target in test_ds.take(1):
   generate_images(generator, example_input, example_target, output_folder + '/sample.png')
-
-
-def cross_entropy_loss(labels, logits):
-    loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels))
-    return loss
-
-def lsgan_loss(labels, logits):
-        loss = tf.reduce_mean(tf.math.squared_difference(logits, labels))
-        return loss 
-    
-def l1_loss(a, b):
-    loss = tf.reduce_mean(tf.math.abs(a - b))
-    return loss
 
 os.makedirs(out_dir, exist_ok=True)
 summary_writer = tf.summary.create_file_writer(
@@ -361,6 +347,7 @@ def res_train_step(input_image, target, step):
   
   return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss
 
+
 @tf.function
 def train_step(input_image, target, step):
   with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
@@ -389,29 +376,6 @@ def train_step(input_image, target, step):
     tf.summary.scalar('disc_loss', disc_loss, step=step//1000)
 
   return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss
-
-
-def plot_imgs(generator, test_ds, out_dir, counter):
-  i = 0
-  plot_list = []
-  for inp, tar in test_ds.take(3):
-    prediction = generate_images(generator, inp, tar)
-    chans = [0, 1, 3, 10, 11, 13]
-    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
-    i+=1
-  fig = plt.figure()
-  columns = 4
-  rows = 3
-  for i in range(0, columns*rows):
-    fig.add_subplot(rows, columns, i + 1)
-    plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
-    plt.imshow(plot_list[i]  * 0.5 + 0.5)
-  fig.tight_layout(pad=1)
-  fig.savefig(out_dir + str(counter) + '.png')
-  plt.close(fig)
 
 
 def fit(train_ds, test_ds, config):

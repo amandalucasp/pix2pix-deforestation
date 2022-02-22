@@ -23,6 +23,30 @@ NUM_CHANNELS = config['output_channels'] # NUMERO DE CANAIS DE CADA IMAGEM (T1, 
 BINARY_MASK = config['binary_mask']
 
 
+def plot_imgs(generator, test_ds, out_dir, counter):
+  i = 0
+  plot_list = []
+  for inp, tar in test_ds.take(3):
+    prediction = generate_images(generator, inp, tar)
+    chans = [0, 1, 3, 10, 11, 13]
+    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
+    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB))
+    plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
+    plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
+    i+=1
+  fig = plt.figure()
+  columns = 4
+  rows = 3
+  for i in range(0, columns*rows):
+    fig.add_subplot(rows, columns, i + 1)
+    plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
+    plt.imshow(plot_list[i]  * 0.5 + 0.5)
+  fig.tight_layout(pad=1)
+  fig.savefig(out_dir + str(counter) + '.png')
+  plt.close(fig)
+
+
+
 def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
     t1_mask = np.squeeze(t1_mask)
     os.makedirs(saving_path + '/imgs/', exist_ok=True)
@@ -122,7 +146,7 @@ def random_jitter(input_image, real_image, NUM_CHANNELS=3):
 
 
 def make_mask_2d(input_image):
-  # transform n-dimensional mask to 2-dimensional
+  # transform n-dimensional mask to 1-dimensional
   # input: (patch_size, patch_size, c) -> t1 (c//2) + mask (c//2)
   # output: (patch_size, patch_size, c//2 + 1) -> t1 (c//2) + mask (1)
   t1, mask = tf.split(input_image, 2, axis=-1)
@@ -183,6 +207,21 @@ def residual_block(input_x, n_kernels, name='name'):
     x = res_encoder_block(x, n_kernels,  strides=1, activation='linear', name=name+'rbb')
     x = tf.keras.layers.Add(name=name+'concatenate')([x, input_x])
     return x
+
+
+def cross_entropy_loss(labels, logits):
+    loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels))
+    return loss
+
+
+def lsgan_loss(labels, logits):
+        loss = tf.reduce_mean(tf.math.squared_difference(logits, labels))
+        return loss 
+    
+    
+def l1_loss(a, b):
+    loss = tf.reduce_mean(tf.math.abs(a - b))
+    return loss
 
 
 def downsample(filters, size, apply_batchnorm=True, strides=2, padding_mode='same', sn=False):

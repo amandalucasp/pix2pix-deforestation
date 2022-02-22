@@ -1,18 +1,10 @@
 import yaml
-import gdal
-import skimage
 import time
 import cv2
 import joblib
 import shutil
-import imageio
 import numpy as np
-from PIL import Image
-import sys, os, platform
-from scipy import ndimage
-import matplotlib.pyplot as plt
-from skimage.util import view_as_windows
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+import os
 from utils import *
 
 start_time = time.time()
@@ -24,21 +16,17 @@ stride = int((1 - config['overlap']) * config['patch_size'])
 tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val']))) # [7,8] 
 
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
-# config['output_path'] = config['output_path'] + 'min_percentage' + str(config['min_percentage'])
 
 print(config)
 os.makedirs(config['output_path'], exist_ok=True)
 shutil.copy('./config.yaml', config['output_path'])
 
 image_array, final_mask = get_dataset(config)
-# Normalization
 
 # Print percentage of each class (whole image)
 print('Total no-deforestaion class is {}'.format(len(final_mask[final_mask==0])))
-print('Total deforestaion class is {}'.format(len(final_mask[final_mask==1])))
-print('Total past deforestaion class is {}'.format(len(final_mask[final_mask==2])))
+print('Total new deforestaion class is {}'.format(len(final_mask[final_mask==1])))
 print('Percentage of deforestaion class is {:.2f}'.format((len(final_mask[final_mask==1])*100)/len(final_mask[final_mask==0])))
-
 
 ################### EXTRACT TILES
 
@@ -71,10 +59,7 @@ if config['save_tiles']:
             if c > 3:
                 chans = [0, 1, 3, 10, 11, 13]
                 tile_img = tile_img[:,:,chans]
-            cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_t1.jpeg', tile_img[:,:,:c//2])
-            cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_t2.jpeg', tile_img[:,:,c//2:])
-        else:
-            cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.jpeg', tile_img)
+        cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.jpeg', tile_img)
 
 
 ################### EXTRACT PATCHES
@@ -146,17 +131,6 @@ if config['save_image_pairs']:
     save_image_pairs(patches_val, patches_val_ref, val_out_path, config)
     print('Saving testing pairs...')
     save_image_pairs(patches_tst, patches_tst_ref, tst_out_path, config)
-
-del patches_trn, patches_trn_ref, patches_val, patches_val_ref, patches_tst, patches_tst_ref
-
-################### EXTRACT MINIPATCHES (FOREST AND DEFORESTATION)
-
-if config['extract_minipatches']:
-    print("EXTRACTING MINIPATCHES")
-    print('[*] Saving training minipatches.')
-    save_minipatches(patches_trn, patches_trn_ref, trn_out_path, config)
-    print('[*] Saving validation minipatches.')
-    save_minipatches(patches_val, patches_val_ref, val_out_path, config)
 
 elapsed_time = time.time() - start_time
 print('[*] Preprocessing done. Elapsed time:', elapsed_time, 'seconds.')
