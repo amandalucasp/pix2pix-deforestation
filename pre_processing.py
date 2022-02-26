@@ -77,7 +77,7 @@ else:
     patches_trn, _ = normalize_img_array(patches_trn, config['type_norm'], scaler=train_scaler)
 
 print('Extracting validation patches')
-patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, stride, config, save_rejected=True)
+patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, stride, config)
 patches_val, _ = normalize_img_array(patches_val, config['type_norm'], scaler=train_scaler)
 print('Extracting test patches')
 patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, stride, config)

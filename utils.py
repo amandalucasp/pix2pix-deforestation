@@ -129,18 +129,6 @@ def process_masks(rej_pairs, rej_pairs_ref, config):
     return final_imgs, final_refs
 
 
-# todo funcao para achar area retangular vazia
-
-
-# todo funcao para aplicar zoom in/out nas shapes de regioes de desmatamento
-
-
-# todo funcao para criar o "banco" de shapes/mini-mascaras de desmatamento
-
-
-# todo funcao para aplicar ruidos morfologicos nas masks
-
-
 def dilate_masks(masks_list, config):
     dilated_masks = []
     i = 0
@@ -201,6 +189,17 @@ def calculate_percentage_of_class(img_mask):
     return per_class_1*100
 
 
+def apply_mask(img, mask):
+    # inverting reference
+    current_def = (np.logical_not(mask.copy()))*1
+    # number of channels
+    channels = img.shape[-1]
+    current_def_matrix = np.repeat(np.expand_dims(current_def, axis = -1), channels, axis=-1)
+    # multiplying the image with the current deforestation mask
+    masked_img = img * current_def_matrix
+    return masked_img
+
+
 def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthetic_input_pairs=False):
     os.makedirs(pairs_path + '/pairs', exist_ok=True)
     counter = 0
@@ -211,57 +210,39 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
 
     h, w, c = patches_list[0].shape
 
-    if config['change_detection']:
-            # T1 + T2 + 3-classes mask
-            for i in range(patches_list.shape[0]):
-                # combined will be: T1 - T2 - mask
-                combined = np.zeros(shape=(h,w*3,c//2)) # 128x(128*3)xc//2
-                combined[:,:w,:] = patches_list[i][:,:,:c//2] # t1
-                if not synthetic_input_pairs:
-                    # if synthetic_input_pairs, T2 stays as zeros
-                    combined[:,w:w*2,:] = patches_list[i][:,:,c//2:] # t2
-                # mask
-                converted = np.expand_dims(patches_ref_list[i].copy(), axis=-1) # 128x128x1
+    for i in range(patches_list.shape[0]):
+        
+        # combined will be: T1 - T2 - mask - masked T2 
+        combined = np.zeros(shape=(h,w*4,c//2))
 
-                # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
-                while converted.shape[2] != c//2:
-                    converted = np.concatenate((converted, np.expand_dims(patches_ref_list[i].copy(),axis=-1)), axis=-1)
-                #converted = array_reference # 128x128x(c//2)
+        t1_img = patches_list[i][:,:,:c//2] 
+        t2_img = patches_list[i][:,:,c//2:]
 
-                if config['type_norm'] == 0: 
-                    converted[converted == 1] = 255/2
-                    converted[converted == 2] = 255
-                combined[:,w*2:,:] = converted
+        # mask
+        mask = np.expand_dims(patches_ref_list[i].copy(), axis=-1) # 128x128 -> 128x128x1
+        # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
+        while mask.shape[2] != c//2:
+            mask = np.concatenate((mask, np.expand_dims(patches_ref_list[i].copy(),axis=-1)), axis=-1)
 
-                np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
-                if config['debug_mode']:
-                    if len(config['channels']) > 3:
-                        combined = combined[:,:,config['debug_channels']]
-                    if config['type_norm'] != 0:
-                        combined = (combined + 1) * 127.5
-                        if synthetic_input_pairs:
-                            combined[:,w:w*2,:] = 0
-                    cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
-                counter += 1
-    else:
-        # T2 only - only segmentation
-        for i in range(patches_list.shape[0]):
-            combined = np.zeros(shape=(h,w*2,c))
-            combined[:,:w,:] = patches_list[i]
-            converted = cv2.cvtColor(patches_ref_list[i].copy(), cv2.COLOR_GRAY2BGR) # verificar se precisa msm, acho que n faz diferenca 
-            if config['type_norm'] == 0: # image is [0,255]
-                if config['two_classes_problem']:
-                    # binary mask
-                    converted = 255*converted
-                else:
-                    # 3-classes mask
-                    converted[converted == 1] = 255/2
-                    converted[converted == 2] = 255
-            combined[:,w:,:] = converted
-            np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
-            if config['debug_mode']:
-                cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
-            counter += 1
+        # apply mask to T2 
+        masked_t2 = apply_mask(t2_img, mask)
+
+        combined[:,:w,:] = t1_img
+        combined[:,w:w*2,:] = t2_img
+        combined[:,w*2:w*3,:] = mask
+        combined[:,w*3:,:] = masked_t2
+        np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
+
+        # salva imagens JPEG
+        if config['debug_mode']:
+            if len(config['channels']) > 3:
+                combined = combined[:,:,config['debug_channels']]
+            if config['type_norm'] != 0:
+                combined = (combined + 1) * 127.5
+                if synthetic_input_pairs:
+                    combined[:,w:w*2,:] = 0
+            cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
+        counter += 1
 
 
 def get_dataset(config):
