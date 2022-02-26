@@ -258,16 +258,16 @@ def get_dataset(config):
     print('[*]Loading dataset')
     if config['change_detection']:
         # LOAD IMAGE T1
-        sent2_2018_1 = load_tif_image(config['root_path'] + '2018_10m_b2348.tif').astype('float32')
-        sent2_2018_2 = load_tif_image(config['root_path'] + '2018_20m_b5678a1112.tif').astype('float32')
+        sent2_2018_1 = load_tif_image(config['root_path'] + 'img/2018_10m_b2348.tif').astype('float32')
+        sent2_2018_2 = load_tif_image(config['root_path'] + 'img/2018_20m_b5678a1112.tif').astype('float32')
         # Resize bands of 20m
         sent2_2018_2 = resize_image(sent2_2018_2.copy(), sent2_2018_1.shape[0], sent2_2018_1.shape[1])
         sent2_2018 = np.concatenate((sent2_2018_1, sent2_2018_2), axis=-1)
         del sent2_2018_1, sent2_2018_2
 
     # LOAD IMAGE T2
-    sent2_2019_1 = load_tif_image(config['root_path'] + '2019_10m_b2348.tif').astype('float32')
-    sent2_2019_2 = load_tif_image(config['root_path'] + '2019_20m_b5678a1112.tif').astype('float32')
+    sent2_2019_1 = load_tif_image(config['root_path'] + 'img/2019_10m_b2348.tif').astype('float32')
+    sent2_2019_2 = load_tif_image(config['root_path'] + 'img/2019_20m_b5678a1112.tif').astype('float32')
     # Resize bands of 20m
     sent2_2019_2 = resize_image(sent2_2019_2.copy(), sent2_2019_1.shape[0], sent2_2019_1.shape[1])
     sent2_2019 = np.concatenate((sent2_2019_1, sent2_2019_2), axis=-1)
@@ -284,11 +284,7 @@ def get_dataset(config):
         image_stack = np.concatenate((sent2_2018, image_stack), axis=-1)
         del sent2_2018 #, sent2_2019
 
-    final_mask = np.load(config['root_path']+'final_mask_label.npy').astype('float32')
-    # 0: forest, 1: new deforestation, 2: old deforestation
-    # change into only forest and deforestation:
-    if config['two_classes_problem']:
-        final_mask[final_mask == 2] = 1
+    final_mask = load_tif_image(config['root_path'] + 'ref/2019_10m_b2348.tif').astype('int')
     print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
 
     final_mask = final_mask[:config['lim_x'], :config['lim_y']]
