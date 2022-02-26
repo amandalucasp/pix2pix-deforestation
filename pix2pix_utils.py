@@ -27,15 +27,17 @@ def plot_imgs(generator, test_ds, out_dir, counter):
   i = 0
   plot_list = []
   for inp, tar in test_ds.take(3):
+    # inp: masked t2
+    # tar: real t2
     prediction = generate_images(generator, inp, tar)
-    chans = [0, 1, 3, 10, 11, 13]
-    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
-    plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB))
+    # prediciton: fake t2
+    chans = [0, 1, 3]
+    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)) # masked t2
+    plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)) # real t2
+    plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans], cv2.COLOR_BGR2RGB)) # fake t2
     i+=1
   fig = plt.figure()
-  columns = 4
+  columns = 3
   rows = 3
   for i in range(0, columns*rows):
     fig.add_subplot(rows, columns, i + 1)
@@ -44,7 +46,6 @@ def plot_imgs(generator, test_ds, out_dir, counter):
   fig.tight_layout(pad=1)
   fig.savefig(out_dir + str(counter) + '.png')
   plt.close(fig)
-
 
 
 def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
@@ -71,42 +72,22 @@ def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
     np.save(saving_path + '/masks/' + filename + '.npy', mask)
 
 
-def load_npy_sample(npy_file):
-  image = np.load(npy_file)
-  w = image.shape[1]
-  w = w // 3
-  # image is T1 // T2 // mask
-  t1_image = image[:,:w, :]
-  t2_image = image[:,w:2*w,:]
-  mask_image = image[:,2*w:,:]
-
-  if BINARY_MASK:
-    mask_image[mask_image == 255] = 0
-
-  input_image = np.concatenate((t1_image, mask_image), axis=-1)
-  input_image = make_mask_2d(input_image)
-  real_image = t2_image
-  input_image = tf.cast(input_image, tf.float32)
-  real_image = tf.cast(real_image, tf.float32)
-  return input_image, real_image
-
-
 def load_npy(npy_file):
   image = np.load(npy_file)
   w = image.shape[1]
   w = w // 3
-  # image is T1 // T2 // mask
+
+  # image is T1 // T2 // mask // masked T2
   t1_image = image[:,:w, :]
   t2_image = image[:,w:2*w,:]
-  mask_image = image[:,2*w:,:]
+  mask_image = image[:,2*w:3*w,:]
+  masked_t2 = image[:,3*w:,:]
 
-  if BINARY_MASK:
-    mask_image[mask_image == 255] = 0
+  # input image: masked T2
+  input_image = tf.cast(masked_t2, tf.float32)
+  # real image: real T2
+  real_image = tf.cast(t2_image, tf.float32)
 
-  input_image = np.concatenate((t1_image, mask_image), axis=-1)
-  real_image = t2_image
-  input_image = tf.cast(input_image, tf.float32)
-  real_image = tf.cast(real_image, tf.float32)
   return input_image, real_image
 
 
@@ -117,26 +98,16 @@ def resize(input_image, real_image, height, width):
 
 
 def random_crop(input_image, real_image, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS=3):
-  t1 = input_image[:, :, :NUM_CHANNELS]
-  mask = input_image[:, :, NUM_CHANNELS:]
-  stacked_image = tf.stack([t1, mask, real_image])
-  cropped_image = tf.image.random_crop(stacked_image, size=[3, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS])
-  concat_image = tf.concat([cropped_image[0], cropped_image[1]], axis=-1)
-  return concat_image, cropped_image[2]
-
-
-def normalize(input_image, real_image):   
-  # Normalizing the images to [-1, 1]
-  input_image = (input_image / 127.5) - 1
-  real_image = (real_image / 127.5) - 1
-  return input_image, real_image
+  stacked_image = tf.stack([input_image, real_image])
+  cropped_image = tf.image.random_crop(stacked_image, size=[2, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS])
+  return cropped_image[0], cropped_image[1]
 
 
 @tf.function()
 def random_jitter(input_image, real_image, NUM_CHANNELS=3):
-  # Resizing to 286x286
+  # Resizing 
   input_image, real_image = resize(input_image, real_image, (IMG_HEIGHT + 30), (IMG_WIDTH + 30))
-  # Random cropping back to 256x256
+  # Random cropping back to original size
   input_image, real_image = random_crop(input_image, real_image, IMG_HEIGHT, IMG_WIDTH, NUM_CHANNELS)
   if tf.random.uniform(()) > 0.5:
     # Random mirroring
@@ -145,27 +116,15 @@ def random_jitter(input_image, real_image, NUM_CHANNELS=3):
   return input_image, real_image
 
 
-def make_mask_2d(input_image):
-  # transform n-dimensional mask to 1-dimensional
-  # input: (patch_size, patch_size, c) -> t1 (c//2) + mask (c//2)
-  # output: (patch_size, patch_size, c//2 + 1) -> t1 (c//2) + mask (1)
-  t1, mask = tf.split(input_image, 2, axis=-1)
-  return tf.concat([t1, tf.expand_dims(mask[:,:,0], axis=-1)], axis=-1)
-
-
 def load_npy_train(image_file):
   input_image, real_image = load_npy(image_file)
   input_image, real_image = random_jitter(input_image, real_image, NUM_CHANNELS)
-  #input_image, real_image = normalize(input_image, real_image)
-  input_image = make_mask_2d(input_image)
   return input_image, real_image
 
 
 def load_npy_test(image_file):
   input_image, real_image = load_npy(image_file)
   input_image, real_image = resize(input_image, real_image, IMG_HEIGHT, IMG_WIDTH)
-  #input_image, real_image = normalize(input_image, real_image)
-  input_image = make_mask_2d(input_image)
   return input_image, real_image
 
 
@@ -292,17 +251,21 @@ def residual_block_v1(filters, size, apply_batchnorm=True, padding_mode='same'):
 
 
 def generate_images(model, test_input, tar, filename=None):
+  # test_input : masked t2
+  # tar: real t2
+
   prediction = model(test_input, training=True)
+  # prediction: fake t2
+
   if filename:
     fig = plt.figure()
-    chans = [0, 1, 3, 10, 11, 13]
-    display_list = [cv2.cvtColor(test_input[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB),
-                    cv2.cvtColor(test_input[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB),
-                    cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB),
-                    cv2.cvtColor(prediction[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)]
-    title = ['Input Image T1', 'Mask', 'Actual T2', 'Predicted T2']
-    for i in range(4):
-      plt.subplot(1, 4, i+1)
+    chans = [0, 1, 3] # rgb channels
+    display_list = [cv2.cvtColor(test_input[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB), # masked t2
+                    cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB), # real t2
+                    cv2.cvtColor(prediction[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)] # fake t2
+    title = ['Input Masked T2', 'Real T2', 'Predicted T2']
+    for i in range(3):
+      plt.subplot(1, 3, i+1)
       plt.title(title[i])
       # Getting the pixel values in the [0, 1] range to plot.
       plt.imshow(display_list[i] * 0.5 + 0.5)
@@ -312,4 +275,5 @@ def generate_images(model, test_input, tar, filename=None):
     plt.tight_layout(pad=1)
     fig.savefig(filename)
     plt.close(fig)
+
   return prediction[0]

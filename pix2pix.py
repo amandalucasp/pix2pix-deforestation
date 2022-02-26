@@ -58,7 +58,7 @@ out_dir = output_folder + "/output_images/"
  
 train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
 
-inp, re = load_npy_sample(train_files[0])
+inp, re = load_npy(train_files[0])
 input_shape = [inp.shape[0], inp.shape[1], config['output_channels'] + 1] # ex.: 128x128x10 + 1
 target_shape = re.shape # 128x128x10
 print('input_shape:', input_shape, np.min(inp), np.max(inp))
@@ -82,6 +82,7 @@ print(train_ds)
 try:
   test_files = glob.glob(str(npy_path / 'testing_data/pairs/*.npy'))
 except tf.errors.InvalidArgumentError:
+  print('Loading validation data for test.')
   test_files = glob.glob(str(npy_path / 'validation_data/pairs/*.npy'))
 
 test_ds = tf.data.Dataset.from_tensor_slices(test_files)
@@ -205,14 +206,14 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, 
 if config['residual_generator']:
   generator = resGenerator(input_shape, ngf)
 else:
-  generator = Generator(input_shape, ngf, config['residual_generator'],
-                      config['number_residuals'], config['drop_blocs'])
+  generator = Generator(input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
 
 print(generator.summary())
 gen_output = generator(inp[tf.newaxis, ...], training=False)
 fig = plt.figure()
 plt.imshow(gen_output[0].numpy()[:,:,config['debug_channels']]*0.5 + 0.5)
 fig.savefig(output_folder + '/gen_output.png')
+
 loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
 def generator_loss(disc_generated_output, gen_output, target):
