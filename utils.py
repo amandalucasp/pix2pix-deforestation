@@ -1,5 +1,5 @@
 import os
-import gdal
+from osgeo import gdal
 import time
 import skimage
 import imageio
@@ -273,6 +273,8 @@ def get_dataset(config):
     sent2_2019 = np.concatenate((sent2_2019_1, sent2_2019_2), axis=-1)
     del sent2_2019_1, sent2_2019_2
     
+    print('Filtering outliers:')
+
     sent2_2019 = sent2_2019[:, :, config['channels']]
     sent2_2019 = filter_outliers(sent2_2019.copy())
     image_stack = sent2_2019
@@ -284,7 +286,9 @@ def get_dataset(config):
         image_stack = np.concatenate((sent2_2018, image_stack), axis=-1)
         del sent2_2018 #, sent2_2019
 
-    final_mask = load_tif_image(config['root_path'] + 'ref/2019_10m_b2348.tif').astype('int')
+    print('Loading reference:')
+
+    final_mask = load_tif_image(config['root_path'] + 'ref/r10m_def_2019.tif').astype('int')
     print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
 
     final_mask = final_mask[:config['lim_x'], :config['lim_y']]
