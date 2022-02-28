@@ -189,17 +189,6 @@ def calculate_percentage_of_class(img_mask):
     return per_class_1*100
 
 
-def apply_mask(img, mask):
-    # inverting reference
-    current_def = (np.logical_not(mask.copy()))*1
-    # number of channels
-    channels = img.shape[-1]
-    current_def_matrix = np.repeat(np.expand_dims(current_def, axis = -1), channels, axis=-1)
-    # multiplying the image with the current deforestation mask
-    masked_img = img * current_def_matrix
-    return masked_img
-
-
 def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthetic_input_pairs=False):
     os.makedirs(pairs_path + '/pairs', exist_ok=True)
     counter = 0
@@ -217,29 +206,33 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
 
         t1_img = patches_list[i][:,:,:c//2] 
         t2_img = patches_list[i][:,:,c//2:]
+        mask = patches_ref_list[i]
 
-        # mask
-        mask = np.expand_dims(patches_ref_list[i].copy(), axis=-1) # 128x128 -> 128x128x1
+        # inverting mask
+        current_mask = (np.logical_not(mask.copy()))*1
         # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
-        while mask.shape[2] != c//2:
-            mask = np.concatenate((mask, np.expand_dims(patches_ref_list[i].copy(),axis=-1)), axis=-1)
+        if mask.shape[-1] != c//2:
+            current_mask = np.repeat(np.expand_dims(current_mask, axis = -1), c//2, axis=-1)
         # apply mask to T2 
-        masked_t2 = apply_mask(t2_img, mask)
+        masked_t2 = t2_img * current_mask
 
-        combined[:,:w,:] = t1_img
+        combined[:,:w,:] = t1_img 
         combined[:,w:w*2,:] = t2_img
-        combined[:,w*2:w*3,:] = mask
+        combined[:,w*2:w*3,:] = current_mask
         combined[:,w*3:,:] = masked_t2
         np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
 
         # salva imagens JPEG
         if config['debug_mode']:
+            combined[:,:w,:] = (t1_img + 1) * 127.5
+            if synthetic_input_pairs:
+                combined[:,w:w*2,:] = 0
+            else:
+                combined[:,w:w*2,:] = (t2_img + 1) * 127.5
+            combined[:,w*2:w*3,:] = current_mask * 127.5
+            combined[:,w*3:,:] = (masked_t2 + 1) * 127.5 * current_mask
             if len(config['channels']) > 3:
                 combined = combined[:,:,config['debug_channels']]
-            if config['type_norm'] != 0:
-                combined = (combined + 1) * 127.5
-                if synthetic_input_pairs:
-                    combined[:,w:w*2,:] = 0
             cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
         counter += 1
 
@@ -261,6 +254,10 @@ def get_dataset(config):
         sent2_2018_2 = load_tif_image(config['root_path'] + 'img/2018_20m_b5678a1112.tif').astype('float32')
         # Resize bands of 20m
         sent2_2018_2 = resize_image(sent2_2018_2.copy(), sent2_2018_1.shape[0], sent2_2018_1.shape[1])
+        # Apply limits
+        sent2_2018_1 = sent2_2018_1[:config['lim_x'], :config['lim_y'], :]
+        sent2_2018_2 = sent2_2018_2[:config['lim_x'], :config['lim_y'], :]
+        # Concatenate
         sent2_2018 = np.concatenate((sent2_2018_1, sent2_2018_2), axis=-1)
         del sent2_2018_1, sent2_2018_2
 
@@ -269,31 +266,32 @@ def get_dataset(config):
     sent2_2019_2 = load_tif_image(config['root_path'] + 'img/2019_20m_b5678a1112.tif').astype('float32')
     # Resize bands of 20m
     sent2_2019_2 = resize_image(sent2_2019_2.copy(), sent2_2019_1.shape[0], sent2_2019_1.shape[1])
+    # Apply limits
+    sent2_2019_1 = sent2_2019_1[:config['lim_x'], :config['lim_y'], :]
+    sent2_2019_2 = sent2_2019_2[:config['lim_x'], :config['lim_y'], :]
+    # Concatenate
     sent2_2019 = np.concatenate((sent2_2019_1, sent2_2019_2), axis=-1)
     del sent2_2019_1, sent2_2019_2
     
-    print('Filtering outliers:')
-
+    print('Filtering outliers...')
     sent2_2019 = sent2_2019[:, :, config['channels']]
-    sent2_2019 = filter_outliers(sent2_2019.copy())
-    image_stack = sent2_2019
+    image_stack = filter_outliers(sent2_2019.copy())
     del sent2_2019
 
     if config['change_detection']:
         sent2_2018 = sent2_2018[:, :, config['channels']]  
         sent2_2018 = filter_outliers(sent2_2018.copy()) 
         image_stack = np.concatenate((sent2_2018, image_stack), axis=-1)
-        del sent2_2018 #, sent2_2019
+        del sent2_2018 
 
-    print('Loading reference:')
-
+    print('Loading reference...')
     final_mask = load_tif_image(config['root_path'] + 'ref/r10m_def_2019.tif').astype('int')
+    # Transpose reference
     final_mask = np.transpose(final_mask.copy(), (1, 0))
-    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
-
+    # Apply limits
     final_mask = final_mask[:config['lim_x'], :config['lim_y']]
-    image_stack = image_stack[:config['lim_x'], :config['lim_y'], :]
-    h_, w_, channels = image_stack.shape
+
+    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
     print('image_stack size: ', image_stack.shape)
 
     return image_stack, final_mask
@@ -311,107 +309,12 @@ def check_patch_class(patch):
         return None
 
 
-def extract_minipatches_from_patch_old(patch, patch_ref, minipatch_size, index):
-    # only works with patch_size = 2*stride
-    stride = int(minipatch_size/2)
-    num_y = patch.shape[0]
-    num_x = patch.shape[1]
-    found_patch = [0, 0]
-    patches = [None, None]
-    patches_ref = [None, None]
-
-    for posicao_y in range(stride, (num_y - (stride)), stride):
-        for posicao_x in range(stride, (num_x - (stride)), stride):
-            y1 = posicao_y - stride
-            y2 = posicao_y + stride
-            x1 = posicao_x - stride
-            x2 = posicao_x + stride
-            aux = patch[y1:y2, x1:x2]
-            aux_ref = patch_ref[y1:y2, x1:x2]
-            # aux_vis_1 = normalization(aux[:,:,:3], 2)
-            # aux_vis_2 = normalization(aux[:, :, 10:13], 2)
-            patch_class = check_patch_class(aux_ref)
-            if patch_class is not None and (found_patch[patch_class] == 0):
-                # print('index:', str(index), 'patch_class:', str(patch_class), found_patch)
-                # np.save(output_path + '/texture_class_' + str(patch_class) + '/' + str(index) + '.npy', aux)
-                # scipy.misc.imsave(output_path + '/texture_class_' + str(patch_class) + '_debug/' + str(index) + '_1.jpg', aux_vis_1)
-                # scipy.misc.imsave(output_path + '/texture_class_' + str(patch_class) + '_debug/' + str(index) + '_2.jpg', aux_vis_2)
-                # np.save(output_path + str(int(patch_class)) + '/references/patch_' + str(index) + '_' + str(counter[int(patch_class)]) + '.npy', aux_ref)
-                patches[patch_class] = aux
-                patches_ref[patch_class] = aux_ref
-                # images_list.append(aux)
-                # ref_list.append(aux_ref)
-                found_patch[patch_class] = 1
-                if found_patch == list([1, 1]):
-                    # print('->found_patch:', found_patch)
-                    return patches, patches_ref, found_patch
-
-    return patches, patches_ref, found_patch
-
-
-def get_only_texture_minipatches(all_patches_array, all_patches_ref, index, out_path):
-    patches = [None, None]
-    patches_ref = [None, None]
-    found_patch = [0, 0]
-    for i in range(len(all_patches_array)):
-        patch_class = check_patch_class(all_patches_ref[i])
-        if patch_class is not None and (found_patch[patch_class] == 0):
-            # print('patch_class:', str(patch_class), found_patch)
-            found_patch[patch_class] = 1
-            patches[patch_class] = all_patches_array[i]
-            patches_ref[patch_class] = all_patches_ref[i]
-            # print(patches[patch_class].shape)
-            aux_vis_1 = patches[patch_class]
-            # aux_vis_2 = patches[patch_class]
-            aux_vis_1 = normalization(aux_vis_1, 2)
-            # aux_vis_2 = normalization(aux_vis_2[:, :, 3:], 2)
-            # print(aux_vis_1.shape, aux_vis_2.shape)
-            imageio.imwrite(out_path + '/texture_class_' + str(patch_class) + '_debug/' + str(index) + '_1.jpg', aux_vis_1)
-            # scipy.misc.imsave(out_path + '/texture_class_' + str(patch_class) + '_debug/' + str(index) + '_2.jpg', aux_vis_2)
-            if found_patch == list([1, 1]):
-                return patches, patches_ref, found_patch
-    return patches, patches_ref, found_patch
-
-
 def write_patches_to_disk(patches, patches_ref, out_path):
     counter = 0
     for i in range(patches.shape[0]):
         np.save(out_path + '/imgs/' + str(i) + '.npy', patches[i])
         np.save(out_path + '/masks/' + str(i) + '.npy', patches_ref[i])
         counter += 1
-
-
-def save_minipatches(patches_list, patches_ref_list, out_path, config):
-    mini_stride = int(config['minipatch_size']/4)
-    os.makedirs(out_path + '/texture_class_0', exist_ok=True)
-    os.makedirs(out_path + '/texture_class_1', exist_ok=True)
-    counter = 0
-    counter_ = 0
-    for idx in range(patches_list.shape[0]):
-        patches, patches_ref, found_patch = extract_minipatches_from_patch(patches_list[idx], patches_ref_list[idx],
-        config['minipatch_size'], mini_stride, idx, out_path)
-        if found_patch == list([1, 1]): # save only patches in pairs
-            np.save(out_path + '/texture_class_0/' + str(idx) + '.npy', patches[0])
-            np.save(out_path + '/texture_class_1/' + str(idx) + '.npy', patches[1])
-            counter_ +=1
-        counter+=1
-
-
-def extract_minipatches_from_patch(input_image, reference, minipatch_size, mini_stride, index, out_path):
-    window_shape = minipatch_size
-    window_shape_array = (window_shape, window_shape, input_image.shape[2])
-    window_shape_ref = (window_shape, window_shape)
-    # extract all possible patches from input patch
-    patches_array = np.array(view_as_windows(input_image, window_shape_array, step = mini_stride))
-    patches_ref = np.array(view_as_windows(reference, window_shape_ref, step = mini_stride))
-    num_row,num_col,p,row,col,depth = patches_array.shape
-    # print(num_row,num_col,p,row,col,depth)
-    patches_array = patches_array.reshape(num_row*num_col,row,col,depth)
-    patches_ref = patches_ref.reshape(num_row*num_col,row,col)
-    # get only the one-class-only minipatches
-    patches, patches_ref, found_patch = get_only_texture_minipatches(patches_array, patches_ref, index, out_path)
-    # return minipatches
-    return patches, patches_ref, found_patch
 
 
 def discard_patches_by_percentage(patches, patches_ref, config, new_deforestation_pixel_value = 1):
@@ -547,7 +450,6 @@ def save_npy_array(np_array, out_path):
         return
 
 
-
 def filter_outliers(img, bins=1000000, bth=0.001, uth=0.999, mask=[0]):
     img[np.isnan(img)]=0 # Filter NaN values.
     if len(mask)==1:
@@ -584,10 +486,6 @@ def normalize_img_array(image, norm_type = 1, scaler = None):
       image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
     if image.ndim == 3:
       image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
-
-    # filtrar os pontos da mascara la 
-    #imgn = np.where(img>0, img, np.nan)
-    #img_norm = (img - np.nanmean(imgn,axis=(0,1)))/np.nanstd(imgn,axis=(0,1))
 
     if scaler != None:
       print('Fitting data to provided scaler...')
