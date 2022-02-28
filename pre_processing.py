@@ -24,7 +24,7 @@ shutil.copy('./config.yaml', config['output_path'])
 image_array, final_mask = get_dataset(config)
 
 # Print percentage of each class (whole image)
-print('Total no-deforestaion class is {}'.format(len(final_mask[final_mask==0])))
+print('Total old/no deforestaion class is {}'.format(len(final_mask[final_mask==0])))
 print('Total new deforestaion class is {}'.format(len(final_mask[final_mask==1])))
 print('Percentage of deforestaion class is {:.2f}'.format((len(final_mask[final_mask==1])*100)/len(final_mask[final_mask==0])))
 
@@ -89,10 +89,10 @@ print(np.min(patches_trn), np.max(patches_trn))
 print(np.min(patches_val), np.max(patches_val))
 print(np.min(patches_tst), np.max(patches_tst))
 
-if config['type_norm'] == 3: # normalizing between [-1, +1]
-    patches_trn_ref = patches_trn_ref - 1
-    patches_val_ref = patches_val_ref - 1
-    patches_tst_ref = patches_tst_ref - 1
+#if config['type_norm'] == 3: # normalizing between [-1, +1]
+    #patches_trn_ref = patches_trn_ref - 1
+    #patches_val_ref = patches_val_ref - 1
+    #patches_tst_ref = patches_tst_ref - 1
 print('Ref values:', np.unique(patches_trn_ref), np.unique(patches_val_ref), np.unique(patches_tst_ref))
 
 print('Scaler params:')
