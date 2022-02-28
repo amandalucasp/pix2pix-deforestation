@@ -223,7 +223,6 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
         # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
         while mask.shape[2] != c//2:
             mask = np.concatenate((mask, np.expand_dims(patches_ref_list[i].copy(),axis=-1)), axis=-1)
-
         # apply mask to T2 
         masked_t2 = apply_mask(t2_img, mask)
 
@@ -289,6 +288,7 @@ def get_dataset(config):
     print('Loading reference:')
 
     final_mask = load_tif_image(config['root_path'] + 'ref/r10m_def_2019.tif').astype('int')
+    final_mask = np.transpose(final_mask.copy(), (1, 0))
     print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
 
     final_mask = final_mask[:config['lim_x'], :config['lim_y']]
@@ -586,8 +586,8 @@ def normalize_img_array(image, norm_type = 1, scaler = None):
       image_reshaped = image.reshape((image.shape[0]*image.shape[1]),image.shape[2])
 
     # filtrar os pontos da mascara la 
-    imgn = np.where(img>0, img, np.nan)
-    img_norm = (img - np.nanmean(imgn,axis=(0,1)))/np.nanstd(imgn,axis=(0,1))
+    #imgn = np.where(img>0, img, np.nan)
+    #img_norm = (img - np.nanmean(imgn,axis=(0,1)))/np.nanstd(imgn,axis=(0,1))
 
     if scaler != None:
       print('Fitting data to provided scaler...')
