@@ -59,8 +59,8 @@ out_dir = output_folder + "/output_images/"
 train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
 
 inp, re = load_npy(train_files[0])
-input_shape = [inp.shape[0], inp.shape[1], config['output_channels'] + 1] # ex.: 128x128x10 + 1
-target_shape = re.shape # 128x128x10
+input_shape = [inp.shape[0], inp.shape[1], config['output_channels']] # 128x128x10 masked_t2
+target_shape = re.shape # 128x128x10 
 print('input_shape:', input_shape, np.min(inp), np.max(inp))
 print('target_shape:', target_shape, np.min(re), np.max(re))
 
@@ -214,15 +214,6 @@ fig = plt.figure()
 plt.imshow(gen_output[0].numpy()[:,:,config['debug_channels']]*0.5 + 0.5)
 fig.savefig(output_folder + '/gen_output.png')
 
-loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-
-def generator_loss(disc_generated_output, gen_output, target):
-  gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
-  #gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
-  l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
-  total_gen_loss = (GAN_WEIGHT * gan_loss) + (LAMBDA * l1_loss)
-  return total_gen_loss, gan_loss, l1_loss
-
 
 def resDiscriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64, name='d'):
   init = tf.random_normal_initializer(0., 0.02)
@@ -290,13 +281,6 @@ plt.colorbar()
 fig.savefig(output_folder + '/disc_out.png')
 print(discriminator.summary())
 
-def discriminator_loss(disc_real_output, disc_generated_output):
-  real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
-  generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
-  total_disc_loss = real_loss + generated_loss
-  #total_disc_loss = tf.reduce_mean(-(tf.math.log(disc_real_output + EPS) + tf.math.log(1 - disc_generated_output + EPS))) # affine-layer
-  return total_disc_loss
-
 generator_optimizer = tf.keras.optimizers.Adam(config['lr'], beta_1=config['beta1'])
 discriminator_optimizer = tf.keras.optimizers.Adam(config['lr'], beta_1=config['beta1'])
 
@@ -312,6 +296,33 @@ for example_input, example_target in test_ds.take(1):
 os.makedirs(out_dir, exist_ok=True)
 summary_writer = tf.summary.create_file_writer(
   log_dir + "fit/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+
+loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
+def generator_loss(disc_generated_output, gen_output, target): # input_image):
+  gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
+  #gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
+  l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
+
+  # create masked version of generator output
+  # mask = np.ones(shape=(input_image.shape[0], input_image.shape[1], input_image.shape[2])) # create array of ones NxNx1
+  # mask[input_image[:,:,-1] == 0] = 0 # where input_image[:,:,-1] is masked with zero, mask it too
+  # channels = input_image.shape[-1]
+  # mask_expand = np.repeat(np.expand_dims(mask, axis = -1), channels, axis=-1) # expand mask to match number of channels
+  # masked_gen_output = gen_output*mask_expand
+  # loss term that aims to guarantee that, for areas that are NOT 'new deforestation', pixels should stay the same
+  # cons_loss = tf.reduce_mean(tf.abs(masked_gen_output - input_image)) 
+
+  total_gen_loss = (GAN_WEIGHT * gan_loss) + (LAMBDA * l1_loss) #+ cons_loss
+  return total_gen_loss, gan_loss, l1_loss
+
+
+def discriminator_loss(disc_real_output, disc_generated_output):
+  real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
+  generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
+  total_disc_loss = real_loss + generated_loss
+  #total_disc_loss = tf.reduce_mean(-(tf.math.log(disc_real_output + EPS) + tf.math.log(1 - disc_generated_output + EPS))) # affine-layer
+  return total_disc_loss
 
 
 @tf.function
@@ -414,18 +425,21 @@ def fit(train_ds, test_ds, config):
 
 if args.train:
   start = time.time()
+  print(f'[*] Start training...')
   fit(train_ds, test_ds, config)
   print(f'[*] Time taken for training: {time.time()-start:.2f} sec\n')
 
   os.makedirs(output_folder + '/generated_plots_test/')
   synthetic_path = output_folder + '/synthetic_data_test/'
 
+  # Save output for test data
   counter = 0
   for inp, tar in test_ds:
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_test/' + str(counter) + '.png')
     save_synthetic_img(inp, prediction, synthetic_path, str(counter))
     counter+=1
 
+  # Save synthetic data
   tr_input_files = glob.glob(str( synthetic_masks_path / 'pairs/*.npy'))
   if len(tr_input_files) > config['max_input_samples']:
     tr_input_files = tr_input_files[:config['max_input_samples']]

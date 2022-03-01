@@ -48,34 +48,34 @@ def plot_imgs(generator, test_ds, out_dir, counter):
   plt.close(fig)
 
 
-def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
-    t1_mask = np.squeeze(t1_mask)
-    os.makedirs(saving_path + '/imgs/', exist_ok=True)
-    os.makedirs(saving_path + '/masks/', exist_ok=True)
-    os.makedirs(saving_path + '/combined/', exist_ok=True)
-    
-    t1 = t1_mask[:,:,:NUM_CHANNELS]
-    mask = t1_mask[:,:,NUM_CHANNELS:]
-    t1_t2 = np.concatenate((t1, t2_img), axis=-1)
+def save_synthetic_img(input, prediction, saving_path, filename):
+  # input: masked_t2 
+  # prediction: fake_t2 
+  
+  os.makedirs(saving_path + '/masked_t2/', exist_ok=True)
+  os.makedirs(saving_path + '/fake_t2/', exist_ok=True)
+  os.makedirs(saving_path + '/combined/', exist_ok=True)
 
-    mask_copy = mask.copy()
-    h, w, c = t1.shape
-    combined = np.zeros(shape=(h,w*3,3), dtype=np.float32)
-    combined[:,:w,:] = t1[:,:,config['debug_channels']]
-    combined[:,w:w*2,:] = cv2.cvtColor(mask_copy, cv2.COLOR_GRAY2RGB)
-    combined[:,2*w:,:] = t2_img.numpy()[:,:,config['debug_channels']]
+  masked_t2 = np.squeeze(input)
+  fake_t2 = prediction.numpy()
+  np.save(saving_path + '/masked_t2/' + filename + '.npy', masked_t2)
+  np.save(saving_path + '/fake_t2/' + filename + '.npy', fake_t2)
 
-    combined = (combined - np.min(combined))/np.ptp(combined)
-    combined = img_as_ubyte(combined)
-    imageio.imwrite(saving_path + '/combined/' + filename + '.png', cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
-    np.save(saving_path + '/imgs/' + filename + '.npy', t1_t2)
-    np.save(saving_path + '/masks/' + filename + '.npy', mask)
+  
+  # salva imagem JPEG para visualizar
+  h, w, _ = masked_t2.shape
+  combined = np.zeros(shape=(h,w*2,3), dtype=np.float32)
+  combined[:,:w,:] = masked_t2[:,:,config['debug_channels']]
+  combined[:,w:,:] = fake_t2[:,:,config['debug_channels']]
+  combined = (combined - np.min(combined))/np.ptp(combined)
+  combined = img_as_ubyte(combined)
+  imageio.imwrite(saving_path + '/combined/' + filename + '.png', cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
 
 
 def load_npy(npy_file):
   image = np.load(npy_file)
   w = image.shape[1]
-  w = w // 3
+  w = w // 4
 
   # image is T1 // T2 // mask // masked T2
   t1_image = image[:,:w, :]
