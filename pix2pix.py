@@ -59,7 +59,7 @@ checkpoint_dir = output_folder + '/training_checkpoints'
 log_dir= output_folder + "/logs/"
 out_dir = output_folder + "/output_images/"
  
-train_files = glob.glob(str(npy_path / 'training_data/pairs/*.npy'))
+train_files = sorted(glob.glob(str(npy_path / 'training_data/pairs/*.npy')))
 
 inp, re = load_npy(train_files[0])
 input_shape = [inp.shape[0], inp.shape[1], config['output_channels']] # 128x128x10 masked_t2
@@ -83,10 +83,10 @@ print(train_ds.element_spec)
 print(train_ds)
 
 try:
-  test_files = glob.glob(str(npy_path / 'testing_data/pairs/*.npy'))
+  test_files = sorted(glob.glob(str(npy_path / 'testing_data/pairs/*.npy')))
 except tf.errors.InvalidArgumentError:
   print('Loading validation data for test.')
-  test_files = glob.glob(str(npy_path / 'validation_data/pairs/*.npy'))
+  test_files = sorted(glob.glob(str(npy_path / 'validation_data/pairs/*.npy')))
 
 test_ds = tf.data.Dataset.from_tensor_slices(test_files)
 test_ds = test_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
