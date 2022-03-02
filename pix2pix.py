@@ -21,6 +21,7 @@ ap.add_argument('-t', '--train', help='run train + inference', action='store_tru
 ap.add_argument('-i', '--inference', help='run inference on input', action='store_true')
 args = ap.parse_args()
 
+print('print(tf.executing_eagerly()):')
 print(tf.executing_eagerly())
 
 stream = open('./config.yaml')
@@ -40,6 +41,8 @@ IMG_WIDTH = config['image_width']
 IMG_HEIGHT = config['image_height']
 OUTPUT_CHANNELS = config['output_channels']
 # Generator Loss Term
+ALPHA = config['alpha']
+BETA = config['beta']
 LAMBDA = config['lambda']
 GAN_WEIGHT = config['gan_weight']
 ngf = config['ngf']
@@ -299,10 +302,39 @@ summary_writer = tf.summary.create_file_writer(
 
 loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
-def generator_loss(disc_generated_output, gen_output, target): # input_image):
+def generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type='default'):
+  # input_image: masked_t2
+  # target: real_t2
+  # gen_output: fake_t2
+  # disc_generated_output: saida do discriminador para gen_output
+
   gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
-  #gan_loss = tf.reduce_mean(-tf.math.log(disc_generated_output + EPS)) # affine-layer
-  l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
+
+  if gen_loss_type == 'default':
+    l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
+    total_gen_loss = (GAN_WEIGHT * gan_loss) + (LAMBDA * l1_loss)
+    return total_gen_loss, gan_loss, l1_loss
+  
+  if gen_loss_type == 'weighted_l1':
+    # loss term to look inside the mask of deforestation:
+    # get zero's from intput_image
+    input_zeros = input_image == 0
+    mask = tf.cast(input_zeros, tf.float32)
+    masked_gen_output = gen_output*mask
+    l1_loss_mask = tf.reduce_mean(tf.abs(masked_gen_output - input_image)) 
+
+    # loss term to look outside the mask (forest/old-deforest regions):
+    # get non-zero's from input_image
+    input_nonzeros = input_image > 0
+    out_mask = tf.cast(input_nonzeros, tf.float32)
+    out_masked_gen_output = gen_output*out_mask
+    l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - input_image)) 
+
+    l1_loss = l1_loss_mask + l1_loss_out
+    total_gen_loss = (GAN_WEIGHT * gan_loss) + (ALPHA * l1_loss_mask) + (BETA * l1_loss_mask)
+    return total_gen_loss, gan_loss, l1_loss
+  
+
 
   # create masked version of generator output
   # mask = np.ones(shape=(input_image.shape[0], input_image.shape[1], input_image.shape[2])) # create array of ones NxNx1
@@ -361,14 +393,14 @@ def res_train_step(input_image, target, step):
 
 
 @tf.function
-def train_step(input_image, target, step):
+def train_step(input_image, target, step, gen_loss_type='default'):
   with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
     gen_output = generator(input_image, training=True) 
 
     disc_real_output = discriminator([input_image, target], training=True)
     disc_generated_output = discriminator([input_image, gen_output], training=True)
 
-    gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(disc_generated_output, gen_output, target)
+    gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type)
     disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
 
   generator_gradients = gen_tape.gradient(gen_total_loss,
@@ -412,7 +444,7 @@ def fit(train_ds, test_ds, config):
     if config['residual_generator']:
       gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = res_train_step(input_image, target, step)
     else:
-      gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = train_step(input_image, target, step)
+      gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = train_step(input_image, target, step, gen_loss_type=config['gen_loss_type'])
 
     # Training step
     if (step+1) % 10 == 0:

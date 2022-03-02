@@ -18,7 +18,7 @@ patch_size = config['patch_size']
 tiles = []
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
 print(config)
-final_out_path = config['output_path'] + '/trained_pix2pix_input_mode_' + str(config['synthetic_input_mode']) + '/'
+final_out_path = config['output_path'] + '/trained_pix2pix_input' + '/'
 rej_out_path = config['output_path'] + '/rejected_patches_npy/'
 os.makedirs(final_out_path, exist_ok=True)
 shutil.copy('./config.yaml', final_out_path)
@@ -45,6 +45,7 @@ tiles = list(set(np.arange(20)+1))
 
 # Load reference masks from previous years
 print('[*] Loading reference masks from previous years...')
+# List of deforestation masks to load
 years = ['2015','2016']
 
 # List of reference masks
