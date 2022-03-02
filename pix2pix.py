@@ -472,7 +472,7 @@ if args.train:
     counter+=1
 
   # Save synthetic data
-  tr_input_files = glob.glob(str( synthetic_masks_path / 'pairs/*.npy'))
+  tr_input_files = sorted(glob.glob(str( synthetic_masks_path / 'pairs/*.npy')))
   if len(tr_input_files) > config['max_input_samples']:
     tr_input_files = tr_input_files[:config['max_input_samples']]
     print('Using the first', str(config['max_input_samples']), 'pairs.')
@@ -495,7 +495,7 @@ if args.inference:
   # checkpoint_prefix = os.path.join(config['checkpoint_folder'], "ckpt")
   checkpoint.restore(tf.train.latest_checkpoint(config['checkpoint_folder']))
 
-  tr_input_files = glob.glob(str( synthetic_masks_path / 'pairs/*.npy'))
+  tr_input_files = sorted(glob.glob(str( synthetic_masks_path / 'pairs/*.npy')))
   pix2pix_input_ds = tf.data.Dataset.from_tensor_slices(tr_input_files)
   pix2pix_input_ds = pix2pix_input_ds.map(lambda item: tuple(tf.compat.v1.numpy_function(load_npy_test, [item], [tf.float32,tf.float32])))
   pix2pix_input_ds = pix2pix_input_ds.map(lambda img, label: set_shapes(img, label, input_shape, target_shape))
