@@ -54,7 +54,7 @@ debug_channels: [0, 1, 3]
 # training_name: 'v0-128'
 data_path: '/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/'
 # data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/v0_256/samples_change_detection_true_two_classes_false'
-training_steps: 500000
+training_steps: 500
 checkpoint_steps: 50000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
 gen_loss_type: 'default' # 'default' or 'weighted_l1'
@@ -79,7 +79,7 @@ binary_mask: False
 
 # TRAINING PARAMETERS - UNET
 unet_data_path: '/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128_baseline_unet/change_detection_true_two_classes_false/'
-synthetic_data_path: '' #'/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/16_11_2021_19_32_40/synthetic_data_random/'
+synthetic_data_path: '/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/pix2pix/02_03_2022_19_12_18/synthetic_data_test/' #'/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/16_11_2021_19_32_40/synthetic_data_random/'
 pix2pix_max_samples: 500
 training_output_path: '/unet-results/'
 input_channels: 6
