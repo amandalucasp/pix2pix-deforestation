@@ -59,9 +59,9 @@ for year in years:
     filename = config['root_path'] + 'ref/r10m_def_' + year + '.tif'
     print('filename:', filename)
     curr_year_mask = load_tif_image(filename).astype('int')
-    curr_year_mask = curr_year_mask[:config['lim_x'], :config['lim_y']]
     # Transpose reference
     curr_year_mask = np.transpose(curr_year_mask.copy(), (1, 0))
+    curr_year_mask = curr_year_mask[:config['lim_x'], :config['lim_y']]
     # Iterate over tiles
     for num_tile in tiles:
         print(num_tile)
