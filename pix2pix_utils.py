@@ -27,21 +27,36 @@ def plot_imgs(generator, test_ds, out_dir, counter):
   i = 0
   plot_list = []
   for inp, tar in test_ds.take(3):
+    prediction = generate_images(generator, inp, tar)
     # inp: masked t2
     # tar: real t2
-    prediction = generate_images(generator, inp, tar)
     # prediciton: fake t2
+
     chans = [0, 1, 3]
-    plot_list.append(cv2.cvtColor(inp[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)) # masked t2
-    plot_list.append(cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)) # real t2
-    plot_list.append(cv2.cvtColor(prediction.numpy()[:,:,chans], cv2.COLOR_BGR2RGB)) # fake t2
+    masked_t2 = cv2.cvtColor(inp[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+    real_t2 = cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+    fake_t2 = cv2.cvtColor(prediction.numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+    # get mask from masked t2
+    inp_ones = masked_t2 == 0
+    mask = tf.cast(inp_ones, tf.float32).numpy().squeeze()[:, :, -1]
+    mask = mask.astype(np.uint8)
+    # draw contours
+    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    contour = max(contours, key = cv2.contourArea)
+    real_t2 = cv2.drawContours(real_t2, contour, -1, (0,255,0), 1)
+    plot_list.append(real_t2) # real t2
+    plot_list.append(fake_t2) # fake t2
     i+=1
-  fig = plt.figure()
-  columns = 3
+
+  fig = plt.figure(figsize=(15,15))
+  columns = 2
   rows = 3
+  title = ['Masked Real T2', 'Predicted T2']
   for i in range(0, columns*rows):
     fig.add_subplot(rows, columns, i + 1)
     plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
+    if i == 0 or i == 1:
+      plt.title(title[i], fontsize=20)
     plt.imshow(plot_list[i]  * 0.5 + 0.5)
   fig.tight_layout(pad=1)
   fig.savefig(out_dir + str(counter) + '.png')
