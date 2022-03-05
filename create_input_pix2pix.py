@@ -23,16 +23,21 @@ shutil.copy('./config.yaml', final_out_path)
 
 # Load numpy array of rejected patches per tile
 list_imgs = glob.glob(rej_out_path + '*_img.npy')
-print('[*] Reading files...')
-rej_pairs, rej_pairs_ref = load_npy_files(list_imgs)
-print(np.min(rej_pairs), np.max(rej_pairs))
-print(np.min(rej_pairs_ref), np.max(rej_pairs_ref))
 
-print('[*] Filtering only NO new deforestation image patches')
-# Get only NO new deforestation image patches
-no_deforestation, new_deforest, old_deforest, only_deforest, all_classes, only_old_deforest = classify_masks(rej_pairs_ref)
-selected_image_patches = rej_pairs[no_deforestation]
-del rej_pairs_ref, rej_pairs
+selected_image_patches = []
+
+for img_path in list_imgs:
+    print('[*] Reading file...')
+    rej_pairs, rej_pairs_ref = load_npy_files(img_path)
+    print(np.min(rej_pairs), np.max(rej_pairs))
+    print(np.min(rej_pairs_ref), np.max(rej_pairs_ref))
+    print('[*] Filtering only NO new deforestation image patches')
+    # Get only NO new deforestation image patches
+    no_deforestation, new_deforest, old_deforest, only_deforest, all_classes, only_old_deforest = classify_masks(rej_pairs_ref)
+    selected_image_patches.append(rej_pairs[no_deforestation])
+    del rej_pairs_ref, rej_pairs
+
+selected_image_patches = np.concatenate(selected_image_patches)
 
 print('selected_image_patches:', selected_image_patches.shape)
 
