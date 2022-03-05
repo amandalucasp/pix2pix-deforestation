@@ -28,7 +28,7 @@ selected_image_patches = []
 
 for img_path in list_imgs:
     print('[*] Reading file...')
-    rej_pairs, rej_pairs_ref = load_npy_files(img_path)
+    rej_pairs, rej_pairs_ref = load_npy_file(img_path)
     print(np.min(rej_pairs), np.max(rej_pairs))
     print(np.min(rej_pairs_ref), np.max(rej_pairs_ref))
     print('[*] Filtering only NO new deforestation image patches')

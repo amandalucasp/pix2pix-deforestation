@@ -15,6 +15,20 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 np.random.seed(0)
 
+
+def load_npy_file(img_file):
+    start = time.time()
+    npy_img = np.load(img_file)
+    elapsed = time.time() - start
+    print(os.path.basename(img_file), elapsed)
+    start = time.time()
+    ref_file = img_file.replace('_img', '_ref_accumulated')
+    npy_ref = np.load(ref_file)
+    elapsed = time.time() - start
+    print(os.path.basename(ref_file), elapsed)
+    return npy_img, npy_ref
+
+
 def load_npy_files(files_list):
     npys_imgs = []
     npys_refs = []
@@ -24,13 +38,11 @@ def load_npy_files(files_list):
         npys_imgs.append(np.load(img_file))
         elapsed = time.time() - start
         print(os.path.basename(img_file), elapsed)
-
         start = time.time()
         ref_file = img_file.replace('_img', '_ref_accumulated')
         npys_refs.append(np.load(ref_file))
         elapsed = time.time() - start
         print(os.path.basename(ref_file), elapsed)
-        
     return np.concatenate((npys_imgs), axis=0), np.concatenate((npys_refs), axis=0)
 
 
