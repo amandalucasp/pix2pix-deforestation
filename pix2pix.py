@@ -325,19 +325,21 @@ def generator_loss(disc_generated_output, gen_output, target, input_image, gen_l
     input_mask = input_image == -2
     mask = tf.cast(input_mask, tf.float32)
     masked_gen_output = gen_output*mask
-    l1_loss_mask = tf.reduce_mean(tf.abs(masked_gen_output - input_image)) 
+    masked_input = input_image*mask
+    l1_loss_mask = tf.reduce_mean(tf.abs(masked_gen_output - masked_input)) 
 
     # loss term to look outside the mask (forest/old-deforest regions):
     # get non-zero's from input_image
     input_nonmask = input_image > -2
     out_mask = tf.cast(input_nonmask, tf.float32)
     out_masked_gen_output = gen_output*out_mask
-    l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - input_image)) 
+    out_masked_input = input_image*out_mask
+    l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - out_masked_input)) 
 
     total_pixels = input_image.shape[0]*input_image.shape[1]*input_image.shape[2]
     ALPHA = 1 / tf.cast(tf.math.count_nonzero(masked_gen_output), tf.float32) / total_pixels
     BETA = 1 / tf.cast(tf.math.count_nonzero(out_masked_gen_output), tf.float32) / total_pixels
-
+  
     l1_loss = l1_loss_mask + l1_loss_out
     total_gen_loss = (GAN_WEIGHT * gan_loss) + (ALPHA * l1_loss_mask) + (BETA * l1_loss_mask)
     return total_gen_loss, gan_loss, l1_loss
