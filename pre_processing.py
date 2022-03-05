@@ -7,13 +7,15 @@ import numpy as np
 import os
 from utils import *
 
+np.random.seed(0)
+
 start_time = time.time()
 
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 
 stride = int((1 - config['overlap']) * config['patch_size'])
-tiles_ts = [7,8] # (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val']))) # [7,8] 
+tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val']))) # [7,8] 
 
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
 
