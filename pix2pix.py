@@ -33,7 +33,10 @@ config = yaml.load(stream, Loader=yaml.FullLoader)
 time_string = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
 if args.inference:
   time_string = time_string + '_inference'
-output_folder = config['data_path'] + '/pix2pix/' + time_string
+if config['pix2pix_output_path'] != '':
+  output_folder = config['pix2pix_output_path'] + '/pix2pix/' + time_string
+else:
+  output_folder = config['data_path'] + '/pix2pix/' + time_string
 os.makedirs(output_folder)
 shutil.copy('./config.yaml', output_folder)
 
