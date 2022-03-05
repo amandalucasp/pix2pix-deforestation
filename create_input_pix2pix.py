@@ -44,7 +44,7 @@ tiles = list(set(np.arange(20)+1))
 # Load reference masks from previous years
 print('[*] Loading reference masks from previous years...')
 # List of deforestation masks to load
-years = ['2015','2016']
+years = ['2015','2016','2017','2018']
 
 # List of reference masks
 patches_ref = []
