@@ -26,8 +26,8 @@ output_path: '/Users/amanda/Documents/GitHub/samples/'
 load_scaler: False
 scaler_path: '/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/minmax_scaler.bin'
 # limite utilizado das imagens de entrada -> image is (17729, 9202)
-lim_x: 4000 # 10000
-lim_y: 4000 # 7000
+lim_x: 17700 # 10000
+lim_y: 9200 # 7000
 # tipo de normalizacao utilizada. ps.: o codigo do pix2pix ja faz a normalizacao entre [0,1]
 # 0: MinMax(0,255), 1: Standard, 2: MinMax(0,1), 3: MinMax(-1,1)
 type_norm: 3
@@ -49,8 +49,8 @@ debug_channels: [0, 1, 3]
 # training_name: 'v0-128'
 data_path: '/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/'
 # data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/v0_256/samples_change_detection_true_two_classes_false'
-training_steps: 500
-checkpoint_steps: 50000 # interval to save checkpoint
+training_steps: 400000
+checkpoint_steps: 40000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
 gen_loss_type: 'default' # 'default' or 'weighted_l1'
 lambda: 100 # weight on L1 term
