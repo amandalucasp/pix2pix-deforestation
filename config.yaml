@@ -14,12 +14,7 @@ overlap: 0.7
 save_patches: True # if False, save only image pairs (expected input from pix2pix net)
 save_tiles: False # save testing tiles 
 save_image_pairs: True
-synthetic_input_mode: 1
 max_input_samples: 10000 # maximo de itens a serem gerados para entrada do pix2pix treinado
-# 0: mascaras originais
-# 1: patches sem desmatamento + masks de desmatamento passado -> pixels de desm. passado >>> novo
-# 2: patches com desmatamento passado -> aplico dilate e chamo a dilatacao de desmatamento novo
-# 3: patches com as 3 classes -> aplico dilate no desmatamento novo
 goal_percentage: 2 # minimum percentage when using dilation
 # minimum NEW deforestation required per patch (new deforestation - class 1)
 # 0: forest, 1: new deforestation, 2: old deforestation

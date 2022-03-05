@@ -48,7 +48,7 @@ def plot_imgs(generator, test_ds, out_dir, counter):
     plot_list.append(fake_t2) # fake t2
     i+=1
 
-  fig = plt.figure(figsize=(15,15))
+  fig = plt.figure()
   columns = 2
   rows = 3
   title = ['Masked Real T2', 'Predicted T2']
