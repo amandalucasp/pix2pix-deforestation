@@ -330,7 +330,7 @@ def generator_loss(disc_generated_output, gen_output, target, input_image, gen_l
     out_masked_gen_output = gen_output*out_mask
     l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - input_image)) 
 
-    total_pixels = input_image.shape[0]*input_image.shape[1]
+    total_pixels = input_image.shape[0]*input_image.shape[1]*input_image.shape[2]
     ALPHA = 1 / tf.cast(tf.math.count_nonzero(masked_gen_output), tf.float32) / total_pixels
     BETA = 1 / tf.cast(tf.math.count_nonzero(out_masked_gen_output), tf.float32) / total_pixels
 
