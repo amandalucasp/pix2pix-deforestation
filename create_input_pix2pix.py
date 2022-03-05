@@ -9,13 +9,11 @@ from utils import *
 
 np.random.seed(0)
 
-
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 start = time.time()
 stride = int((1 - config['overlap']) * config['patch_size'])
 patch_size = config['patch_size']
-tiles = []
 config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
 print(config)
 final_out_path = config['output_path'] + '/trained_pix2pix_input' + '/'

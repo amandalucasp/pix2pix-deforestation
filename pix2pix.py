@@ -16,6 +16,9 @@ warnings.filterwarnings( "ignore", module = "matplotlib\..*" )
 
 from pix2pix_utils import *
 
+np.random.seed(0)
+tf.random.set_seed(0)
+
 ap = argparse.ArgumentParser()
 ap.add_argument('-t', '--train', help='run train + inference', action='store_true')
 ap.add_argument('-i', '--inference', help='run inference on input', action='store_true')
@@ -33,8 +36,6 @@ if args.inference:
 output_folder = config['data_path'] + '/pix2pix/' + time_string
 os.makedirs(output_folder)
 shutil.copy('./config.yaml', output_folder)
-
-np.random.seed(0)
 
 BATCH_SIZE = config['batch_size']
 IMG_WIDTH = config['image_width']
