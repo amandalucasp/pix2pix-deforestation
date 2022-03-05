@@ -318,35 +318,25 @@ def generator_loss(disc_generated_output, gen_output, target, input_image, gen_l
   if gen_loss_type == 'weighted_l1':
     # loss term to look inside the mask of deforestation:
     # get zero's from intput_image
-    input_zeros = input_image == 0
-    mask = tf.cast(input_zeros, tf.float32)
+    input_mask = input_image == -2
+    mask = tf.cast(input_mask, tf.float32)
     masked_gen_output = gen_output*mask
     l1_loss_mask = tf.reduce_mean(tf.abs(masked_gen_output - input_image)) 
 
     # loss term to look outside the mask (forest/old-deforest regions):
     # get non-zero's from input_image
-    input_nonzeros = input_image > 0
-    out_mask = tf.cast(input_nonzeros, tf.float32)
+    input_nonmask = input_image > -2
+    out_mask = tf.cast(input_nonmask, tf.float32)
     out_masked_gen_output = gen_output*out_mask
     l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - input_image)) 
+
+    total_pixels = input_image.shape[0]*input_image.shape[1]
+    ALPHA = 1 / tf.cast(tf.math.count_nonzero(masked_gen_output), tf.float32) / total_pixels
+    BETA = 1 / tf.cast(tf.math.count_nonzero(out_masked_gen_output), tf.float32) / total_pixels
 
     l1_loss = l1_loss_mask + l1_loss_out
     total_gen_loss = (GAN_WEIGHT * gan_loss) + (ALPHA * l1_loss_mask) + (BETA * l1_loss_mask)
     return total_gen_loss, gan_loss, l1_loss
-  
-
-
-  # create masked version of generator output
-  # mask = np.ones(shape=(input_image.shape[0], input_image.shape[1], input_image.shape[2])) # create array of ones NxNx1
-  # mask[input_image[:,:,-1] == 0] = 0 # where input_image[:,:,-1] is masked with zero, mask it too
-  # channels = input_image.shape[-1]
-  # mask_expand = np.repeat(np.expand_dims(mask, axis = -1), channels, axis=-1) # expand mask to match number of channels
-  # masked_gen_output = gen_output*mask_expand
-  # loss term that aims to guarantee that, for areas that are NOT 'new deforestation', pixels should stay the same
-  # cons_loss = tf.reduce_mean(tf.abs(masked_gen_output - input_image)) 
-
-  total_gen_loss = (GAN_WEIGHT * gan_loss) + (LAMBDA * l1_loss) #+ cons_loss
-  return total_gen_loss, gan_loss, l1_loss
 
 
 def discriminator_loss(disc_real_output, disc_generated_output):

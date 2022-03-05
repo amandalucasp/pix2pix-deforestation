@@ -23,6 +23,56 @@ NUM_CHANNELS = config['output_channels'] # NUMERO DE CANAIS DE CADA IMAGEM (T1, 
 BINARY_MASK = config['binary_mask']
 
 
+def draw_mask_contour(masked_t2, real_t2):
+  # get mask from masked t2
+  inp_mask = masked_t2 == -2
+  mask = tf.cast(inp_mask, tf.float32).numpy().squeeze()[:, :, -1]
+  mask = mask.astype(np.uint8)
+  # draw contours
+  contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+  contour = max(contours, key = cv2.contourArea)
+  real_t2 = cv2.drawContours(real_t2, contour, -1, (0,255,0), 1)
+  return real_t2
+
+
+def plot_image(plot_list, columns, rows, title, filename=None, pad=1):
+  fig = plt.figure()
+  for i in range(0, columns*rows):
+    fig.add_subplot(rows, columns, i + 1)
+    plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
+    if i == 0 or i == 1:
+      plt.title(title[i])
+    plt.imshow(plot_list[i]  * 0.5 + 0.5)
+  fig.tight_layout(pad=pad)
+  if filename:
+    fig.savefig(filename)
+  plt.close(fig)
+
+
+def generate_images(model, test_input, tar, filename=None):
+  # test_input : masked t2
+  # tar: real t2
+
+  prediction = model(test_input, training=True)
+  # prediction: fake t2
+
+  chans = [0, 1, 3]
+  masked_t2 = cv2.cvtColor(test_input[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+  real_t2 = cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+  fake_t2 = cv2.cvtColor(prediction[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+
+  real_t2 = draw_mask_contour(masked_t2, real_t2)
+  plot_list = [real_t2, fake_t2]
+
+  if filename:
+    columns = 2
+    rows = 1
+    title = ['Masked Real T2', 'Predicted T2']
+    plot_image(plot_list, columns, rows, title, filename, pad=3)
+
+  return prediction[0]
+
+
 def plot_imgs(generator, test_ds, out_dir, counter):
   i = 0
   plot_list = []
@@ -36,52 +86,39 @@ def plot_imgs(generator, test_ds, out_dir, counter):
     masked_t2 = cv2.cvtColor(inp[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
     real_t2 = cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
     fake_t2 = cv2.cvtColor(prediction.numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
-    # get mask from masked t2
-    inp_ones = masked_t2 == 0
-    mask = tf.cast(inp_ones, tf.float32).numpy().squeeze()[:, :, -1]
-    mask = mask.astype(np.uint8)
-    # draw contours
-    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    contour = max(contours, key = cv2.contourArea)
-    real_t2 = cv2.drawContours(real_t2, contour, -1, (0,255,0), 1)
+    real_t2 = draw_mask_contour(masked_t2, real_t2)
     plot_list.append(real_t2) # real t2
     plot_list.append(fake_t2) # fake t2
     i+=1
 
-  fig = plt.figure()
   columns = 2
   rows = 3
   title = ['Masked Real T2', 'Predicted T2']
-  for i in range(0, columns*rows):
-    fig.add_subplot(rows, columns, i + 1)
-    plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
-    if i == 0 or i == 1:
-      plt.title(title[i], fontsize=20)
-    plt.imshow(plot_list[i]  * 0.5 + 0.5)
-  fig.tight_layout(pad=1)
-  fig.savefig(out_dir + str(counter) + '.png')
-  plt.close(fig)
+  filename = out_dir + str(counter) + '.png'
+  plot_image(plot_list, columns, rows, title, filename)
 
 
 def save_synthetic_img(input, prediction, saving_path, filename):
   # input: masked_t2 
   # prediction: fake_t2 
-  
-  os.makedirs(saving_path + '/masked_t2/', exist_ok=True)
+
   os.makedirs(saving_path + '/fake_t2/', exist_ok=True)
   os.makedirs(saving_path + '/combined/', exist_ok=True)
 
-  masked_t2 = np.squeeze(input)
+  masked_t2 = np.squeeze(input).copy()
   fake_t2 = prediction.numpy()
-  np.save(saving_path + '/masked_t2/' + filename + '.npy', masked_t2)
   np.save(saving_path + '/fake_t2/' + filename + '.npy', fake_t2)
 
+  # get mask from masked t2
+  new_deforestation_pixels = masked_t2 == -2
+  masked_t2[new_deforestation_pixels] = 0
   
   # salva imagem JPEG para visualizar
+  chans = [0, 1, 3]
   h, w, _ = masked_t2.shape
   combined = np.zeros(shape=(h,w*2,3), dtype=np.float32)
-  combined[:,:w,:] = masked_t2[:,:,config['debug_channels']]
-  combined[:,w:,:] = fake_t2[:,:,config['debug_channels']]
+  combined[:,:w,:] = masked_t2[:,:,chans]
+  combined[:,w:,:] = fake_t2[:,:,chans]
   combined = (combined - np.min(combined))/np.ptp(combined)
   combined = img_as_ubyte(combined)
   imageio.imwrite(saving_path + '/combined/' + filename + '.png', cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
@@ -93,10 +130,14 @@ def load_npy(npy_file):
   w = w // 4
 
   # image is T1 // T2 // mask // masked T2
-  t1_image = image[:,:w, :]
+  # t1_image = image[:,:w, :]
   t2_image = image[:,w:2*w,:]
-  mask_image = image[:,2*w:3*w,:]
+  mask_image = image[:,2*w:3*w,:] 
   masked_t2 = image[:,3*w:,:]
+
+  # change masked_t2 mask value to -2
+  new_deforestation_pixels = mask_image == 0 # outside of mask: 1, inside: 0
+  masked_t2[new_deforestation_pixels] = -2
 
   # input image: masked T2
   input_image = tf.cast(masked_t2, tf.float32)
@@ -263,32 +304,3 @@ def residual_block_v1(filters, size, apply_batchnorm=True, padding_mode='same'):
       result.add(tf.keras.layers.BatchNormalization(momentum=0.8))
     result.add(tf.keras.layers.ReLU())
     return result
-
-
-def generate_images(model, test_input, tar, filename=None):
-  # test_input : masked t2
-  # tar: real t2
-
-  prediction = model(test_input, training=True)
-  # prediction: fake t2
-
-  if filename:
-    fig = plt.figure()
-    chans = [0, 1, 3] # rgb channels
-    display_list = [cv2.cvtColor(test_input[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB), # masked t2
-                    cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB), # real t2
-                    cv2.cvtColor(prediction[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)] # fake t2
-    title = ['Input Masked T2', 'Real T2', 'Predicted T2']
-    for i in range(3):
-      plt.subplot(1, 3, i+1)
-      plt.title(title[i])
-      # Getting the pixel values in the [0, 1] range to plot.
-      plt.imshow(display_list[i] * 0.5 + 0.5)
-      plt.axis('off')
-    plt.tick_params(left = False, right = False , labelleft = False ,
-                labelbottom = False, bottom = False)
-    plt.tight_layout(pad=1)
-    fig.savefig(filename)
-    plt.close(fig)
-
-  return prediction[0]
