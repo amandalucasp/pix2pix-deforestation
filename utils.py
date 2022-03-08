@@ -250,10 +250,6 @@ def get_dataset(config):
     """
     input: config - a dict file with processing parameters
     output: image_stack, final_mask
-        - two_classes_problem = True:
-            image_stack: only T2; final_mask: binary mask; 
-        - two_classes_problem = False:
-            image_stack: T1 + T2 (concat); final_mask: 3-classes mask;  
     """
 
     print('[*]Loading dataset')

@@ -30,9 +30,37 @@ from skimage.filters import rank
 import skimage.morphology 
 
 from utils import *
-from utils_unet import *
 
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+
+# Function to compute mAP
+def Area_under_the_curve(X, Y):
+    #X -> Recall
+    #Y -> Precision
+    dx = np.diff(X)
+    X_ = np.array([])
+    Y_ = np.array([])
+    
+    eps = 5e-3
+    for i in range(len(dx)):
+        if dx[i] > eps:
+            x0 = X[i]; x1 = X[i+1]
+            y0 = Y[i]; y1 = Y[i+1]
+            a = (y1 - y0) / (x1 - x0)
+            b = y0 - a * x0
+            x = np.arange(x0, x1, eps)
+            y = a * x + b                
+            X_ = np.concatenate((X_, x))
+            Y_ = np.concatenate((Y_, y))
+        else:
+            X_ = np.concatenate((X_, X[i:i+1]))
+            Y_ = np.concatenate((Y_, Y[i:i+1]))
+    X_ = np.concatenate((X_, X[-1:]))
+    Y_ = np.concatenate((Y_, Y[-1:]))
+    new_dx = np.diff(X_)
+    area = 100 * np.inner(Y_[:-1], new_dx)
+    return area
 
 
 def normalization_image(image, norm_type = 1):
@@ -51,8 +79,13 @@ def normalization_image(image, norm_type = 1):
     return image_normalized1
 
 
-def normalization_unet(image, norm_type = 1, scaler = None):
+def test_model(model, patch_test):
+  result = model.predict(patch_test)
+  predicted_class = np.argmax(result, axis=-1)
+  return predicted_class
 
+
+def normalization_unet(image, norm_type = 1, scaler = None):
     if image.ndim == 4:
       image_reshaped = image.reshape((image.shape[0]*image.shape[1]*image.shape[2]),image.shape[3])
     if image.ndim == 3:
@@ -70,8 +103,9 @@ def normalization_unet(image, norm_type = 1, scaler = None):
           scaler = MinMaxScaler(feature_range=(-1,1))
       if (norm_type == 4):
           scaler = MinMaxScaler(feature_range=(0,2))
-      scaler = scaler.fit(image_reshaped) # todo retornar esse scaler do treino pra usar nos dados de validacao e teste
-    
+      if (norm_type == 5):
+          scaler = MinMaxScaler(feature_range=(0,255))
+      scaler = scaler.fit(image_reshaped)
     image_normalized = scaler.transform(image_reshaped)
     if image.ndim == 4:
       image_normalized1 = image_normalized.reshape(image.shape[0],image.shape[1],image.shape[2], image.shape[3])
@@ -145,56 +179,47 @@ def compute_metrics(true_labels, predicted_labels):
   return accuracy, f1score, recall, precision
 
 
-def data_augmentation(image, ref):
-  if np.random.rand() <= 0.5:
-    return image, ref
-  else:
-    t = np.random.randint(3)
-    image = np.rot90(image, t + 1)
-    ref = np.rot90(ref, t + 1)
-    return image, ref
+def data_augmentation(img, mask):
+  image = np.rot90(img, 1)
+  ref = np.rot90(mask, 1)
+  return image, ref
 
 
-def load_patches(root_path, folder, from_pix2pix=False, augment_data=False):
+def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=1000, augment_data=False, number_class=3):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
   img_files = os.listdir(imgs_dir)
   patches = []
   patches_ref = []
-
   selected_pos = np.arange(len(img_files))
-  if from_pix2pix and len(img_files) > 1000:
-    print('[*]Loading input from pix2pix.', from_pix2pix)
-    np.random.seed(2020)
-    selected_pos = np.random.choice(len(img_files), 1000)
 
-  print('Some of the randomly chosen samples:', selected_pos[0:20])
+  if from_pix2pix and len(img_files) > pix2pix_max_samples:
+    print('[*]Loading input from pix2pix.', from_pix2pix)
+    selected_pos = np.random.choice(len(img_files), pix2pix_max_samples, replace=False)
+    print('Some of the randomly chosen samples:', selected_pos[0:20])
 
   for i in selected_pos:
     img_path = imgs_dir + img_files[i]
-    mask_path = masks_dir + img_files[i]
-    img = np.load(img_path)
+    mask_path = masks_dir + img_files[i]    
+    img = np.load(img_path) 
     mask = np.load(mask_path)
-    if from_pix2pix: # todo consertar a parada na saida do pix2pixutils pra nao precisar disso aqui
-      mask = to_unet_format(mask)
-    if augment_data:
+    img, mask = to_unet_format(img, mask)
+    if augment_data and np.random.rand() > 0.5:
       img, mask = data_augmentation(img, mask)
     patches.append(img)
     patches_ref.append(mask)
-  return np.array(patches), np.array(patches_ref)
+  
+  return np.array(patches), np.squeeze(np.array(patches_ref))
 
 
-def to_unet_format(mask):
-  # pix2pix is fed a 3-channels mask, but u-net expects a 1-channel mask
-  mask = mask[:,:,0]
-  # print(mask.shape)
-  #unique, counts = np.unique(mask, return_counts=True)
-  mask[mask == 1] = 2
-  mask[mask == 0] = 1
-  mask[mask == -1] = 0
-  #unique, counts = np.unique(mask, return_counts=True)
-  #print('to_unet_format:', unique, counts)
-  return mask
+def to_unet_format(img, mask):
+  # pix2pix generates a [-1, +1] output, but u-net expects [0, 1]
+  # [-1, 1] => [0, 2]
+  img = img*0.5 + 0.5
+  # u-net expects a 1-channel mask
+  # [-1, 0, +1] => [0, 1, 2]
+  # mask = mask + 1 
+  return img, mask
 
 
 def load_tiles(root_path, testing_tiles_dir, tiles_ts):
@@ -275,4 +300,11 @@ def complete_nan_values(metrics):
                 vec_prec[j] == 1
     metrics[:,1] = vec_prec
     return metrics 
-
+    vec_prec = metrics[:,1]
+    for j in reversed(range(len(vec_prec))):
+        if np.isnan(vec_prec[j]):
+            vec_prec[j] = 2*vec_prec[j+1]-vec_prec[j+2]
+            if vec_prec[j] >= 1:
+                vec_prec[j] == 1
+    metrics[:,1] = vec_prec
+    return metrics 

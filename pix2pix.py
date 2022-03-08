@@ -336,12 +336,8 @@ def generator_loss(disc_generated_output, gen_output, target, input_image, gen_l
     out_masked_input = input_image*out_mask
     l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - out_masked_input)) 
 
-    total_pixels = input_image.shape[0]*input_image.shape[1]*input_image.shape[2]
-    ALPHA = 1 / tf.cast(tf.math.count_nonzero(masked_gen_output), tf.float32) / total_pixels
-    BETA = 1 / tf.cast(tf.math.count_nonzero(out_masked_gen_output), tf.float32) / total_pixels
-  
     l1_loss = l1_loss_mask + l1_loss_out
-    total_gen_loss = (GAN_WEIGHT * gan_loss) + (ALPHA * l1_loss_mask) + (BETA * l1_loss_mask)
+    total_gen_loss = (GAN_WEIGHT * gan_loss) + (ALPHA * l1_loss_mask) + (BETA * l1_loss_out)
     return total_gen_loss, gan_loss, l1_loss
 
 
@@ -396,7 +392,7 @@ def train_step(input_image, target, step, gen_loss_type='default'):
     disc_real_output = discriminator([input_image, target], training=True)
     disc_generated_output = discriminator([input_image, gen_output], training=True)
 
-    gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type)
+    gen_total_loss, gen_gan_loss, gen_l1_loss, alpha, beta = generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type)
     disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
 
   generator_gradients = gen_tape.gradient(gen_total_loss,
@@ -415,7 +411,7 @@ def train_step(input_image, target, step, gen_loss_type='default'):
     tf.summary.scalar('gen_l1_loss', gen_l1_loss, step=step//1000)
     tf.summary.scalar('disc_loss', disc_loss, step=step//1000)
 
-  return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss
+  return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss, alpha, beta
 
 
 def fit(train_ds, test_ds, config):
