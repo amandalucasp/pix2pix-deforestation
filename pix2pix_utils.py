@@ -19,8 +19,7 @@ config = yaml.load(stream, Loader=yaml.FullLoader)
 
 IMG_WIDTH = config['image_width']
 IMG_HEIGHT = config['image_height'] 
-NUM_CHANNELS = config['output_channels'] # NUMERO DE CANAIS DE CADA IMAGEM (T1, T2, MASCARA)
-BINARY_MASK = config['binary_mask']
+NUM_CHANNELS = config['output_channels'] 
 
 
 def draw_mask_contour(masked_t2, real_t2):
