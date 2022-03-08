@@ -392,7 +392,7 @@ def train_step(input_image, target, step, gen_loss_type='default'):
     disc_real_output = discriminator([input_image, target], training=True)
     disc_generated_output = discriminator([input_image, gen_output], training=True)
 
-    gen_total_loss, gen_gan_loss, gen_l1_loss, alpha, beta = generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type)
+    gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type)
     disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
 
   generator_gradients = gen_tape.gradient(gen_total_loss,
@@ -411,7 +411,7 @@ def train_step(input_image, target, step, gen_loss_type='default'):
     tf.summary.scalar('gen_l1_loss', gen_l1_loss, step=step//1000)
     tf.summary.scalar('disc_loss', disc_loss, step=step//1000)
 
-  return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss, alpha, beta
+  return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss
 
 
 def fit(train_ds, test_ds, config):
