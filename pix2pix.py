@@ -36,6 +36,8 @@ config = yaml.load(stream, Loader=yaml.FullLoader)
 time_string = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
 if args.inference:
   time_string = time_string + '_inference'
+if args.test:
+  time_string = time_string + '_test'
 if config['pix2pix_output_path'] != '':
   output_folder = config['pix2pix_output_path'] + '/pix2pix/' + time_string
 else:
