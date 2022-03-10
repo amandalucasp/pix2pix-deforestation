@@ -14,7 +14,7 @@ config = yaml.load(stream, Loader=yaml.CLoader)
 start = time.time()
 stride = int((1 - config['overlap']) * config['patch_size'])
 patch_size = config['patch_size']
-config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() +  '_two_classes_' + str(config['two_classes_problem']).lower()
+config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() 
 print(config)
 final_out_path = config['output_path'] + '/trained_pix2pix_input' + '/'
 rej_out_path = config['output_path'] + '/rejected_patches_npy/'
