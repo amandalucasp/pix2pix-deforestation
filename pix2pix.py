@@ -489,6 +489,7 @@ if args.train:
 if args.test:
   os.makedirs(output_folder + '/generated_plots_test/')
   synthetic_path = output_folder + '/synthetic_data_test/'
+  checkpoint.restore(tf.train.latest_checkpoint(config['checkpoint_folder']))
   # Save output for test data
   counter = 0
   for inp, tar in test_ds:
