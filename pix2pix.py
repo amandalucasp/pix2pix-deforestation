@@ -3,6 +3,7 @@ from datetime import datetime
 import matplotlib 
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
+from pathlib import Path
 import tensorflow as tf
 import numpy as np
 import argparse
@@ -515,7 +516,7 @@ if args.inference:
 
   counter = 0
   for inp, tar in pix2pix_input_ds:
-    print(inp.shape, inp[0].shape) # ver de tirar esse [0]
-    prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
-    save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
+    filename = Path(tr_input_files[counter]).stem
+    prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + filename + '.png')
+    save_synthetic_img(inp[0], prediction, synthetic_path, filename)
     counter+=1
