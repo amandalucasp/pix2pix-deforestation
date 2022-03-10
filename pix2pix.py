@@ -24,6 +24,7 @@ tf.random.set_seed(0)
 ap = argparse.ArgumentParser()
 ap.add_argument('-t', '--train', help='run train + inference', action='store_true')
 ap.add_argument('-i', '--inference', help='run inference on input', action='store_true')
+ap.add_argument('-e', '--test', help='run inference on input', action='store_true')
 args = ap.parse_args()
 
 print('print(tf.executing_eagerly()):')
@@ -484,6 +485,15 @@ if args.train:
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
     save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
     counter+=1
+
+if args.test:
+  # Save output for test data
+  counter = 0
+  for inp, tar in test_ds:
+    prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_test/' + str(counter) + '.png')
+    save_synthetic_img(inp, prediction, synthetic_path, str(counter))
+    counter+=1
+
 
 if args.inference:
   # checkpoint_prefix = os.path.join(config['checkpoint_folder'], "ckpt")
