@@ -406,8 +406,13 @@ def train_step(input_image, target, step, gen_loss_type='default'):
   discriminator_gradients = disc_tape.gradient(disc_loss,
                                                discriminator.trainable_variables)
 
+  if config['slow_discriminator']:
+    # otimiza os parametros do gerador 2 vezes em um mesmo loop
+    generator_optimizer.apply_gradients(zip(generator_gradients,
+                                            generator.trainable_variables))
+
   generator_optimizer.apply_gradients(zip(generator_gradients,
-                                          generator.trainable_variables))
+                                            generator.trainable_variables))                                      
   discriminator_optimizer.apply_gradients(zip(discriminator_gradients,
                                               discriminator.trainable_variables))
 
