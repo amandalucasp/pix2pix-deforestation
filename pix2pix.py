@@ -487,6 +487,8 @@ if args.train:
     counter+=1
 
 if args.test:
+  os.makedirs(output_folder + '/generated_plots_test/')
+  synthetic_path = output_folder + '/synthetic_data_test/'
   # Save output for test data
   counter = 0
   for inp, tar in test_ds:
