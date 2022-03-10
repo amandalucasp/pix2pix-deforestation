@@ -1,6 +1,8 @@
 
 #from SpectralNormalizationKeras import ConvSN2D
 from sklearn.preprocessing import MinMaxScaler
+import matplotlib 
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from skimage import img_as_ubyte
 import tensorflow as tf

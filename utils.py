@@ -9,7 +9,9 @@ import numpy as np
 from PIL import Image
 import sys, os, platform
 from scipy import ndimage
-import matplotlib.pyplot as plt
+import matplotlib 
+matplotlib.use('Agg')
+from matplotlib import pyplot as plt
 from skimage.util import view_as_windows
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 

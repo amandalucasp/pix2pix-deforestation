@@ -1,5 +1,7 @@
 #from SpectralNormalizationKeras import ConvSN2D
 from datetime import datetime
+import matplotlib 
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import tensorflow as tf
 import numpy as np

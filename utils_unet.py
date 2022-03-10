@@ -2,6 +2,8 @@ from contextlib import redirect_stdout
 from sklearn.utils import shuffle
 import matplotlib.pyplot as plt
 from osgeo import ogr, gdal
+import matplotlib 
+matplotlib.use('Agg')
 import matplotlib.colors
 from PIL import Image
 import numpy as np
