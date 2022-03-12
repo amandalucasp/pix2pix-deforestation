@@ -110,7 +110,6 @@ ax1.imshow(mean_prob, cmap = cmap)
 ax1.axis('off')
 
 ref2 = final_mask.copy()
-ref2 [final_mask == 2] = 0
 ax2 = fig.add_subplot(122)
 plt.title('Reference')
 ax2.imshow(ref2, cmap = cmap)
