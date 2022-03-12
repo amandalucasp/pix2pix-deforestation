@@ -6,7 +6,7 @@ import yaml
 from utils_unet import *
 from utils import *
 
-unet_path = 'C:/Users/amandalucs/Documents/Github/unet-results/2022_03_11_16_24_06_augmented'
+unet_path = 'C:/Users/amandalucs/Documents/Github/unet-results/2022_03_11_21_05_47_augmented'
 
 seed = 0
 np.random.seed(seed)
@@ -17,6 +17,7 @@ config = yaml.load(stream, Loader=yaml.CLoader)
 
 output_folder = unet_path + '/test/'
 os.makedirs(output_folder, exist_ok=True)
+
 batch_size = config['batch_size_unet']
 epochs = config['epochs_unet']
 nb_filters = config['nb_filters']
@@ -24,6 +25,7 @@ number_runs = config['times']
 patience_value = config['patience_value']
 type_norm_unet = config['type_norm_unet']
 number_class = 2 
+tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
 
 print('[*] Loading image array...')
 image_array, final_mask, _ = get_dataset(config)
@@ -52,10 +54,13 @@ num_patches_x = int(h/patch_size_rows)
 num_patches_y = int(w/patch_size_cols)
 input_shape=(patch_size_rows,patch_size_cols, c)
 
+weights = [0.2, 0.8]
+loss = weighted_categorical_crossentropy(weights)
+
 time_ts = []
 for run in range(0, number_runs):
     current_model = unet_path + '/checkpoints/model_' + str(run)
-    net = tf.keras.models.load_model(current_model)
+    net = tf.keras.models.load_model(current_model, custom_objects={"loss": loss})
     net.summary()
     # testing the model
     new_model = build_unet(input_shape, nb_filters, number_class)
