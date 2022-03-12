@@ -2,6 +2,7 @@
 import tensorflow as tf
 import joblib
 import yaml
+import os
 
 from utils_unet import *
 from utils import *
@@ -17,6 +18,9 @@ config = yaml.load(stream, Loader=yaml.CLoader)
 
 output_folder = unet_path + '/test/'
 os.makedirs(output_folder, exist_ok=True)
+
+if config['run_inference_on_cpu']:
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 batch_size = config['batch_size_unet']
 epochs = config['epochs_unet']
@@ -61,15 +65,16 @@ time_ts = []
 for run in range(0, number_runs):
     current_model = unet_path + '/checkpoints/model_' + str(run)
     net = tf.keras.models.load_model(current_model, custom_objects={"loss": loss})
-    net.summary()
+    # net.summary()
     # testing the model
     new_model = build_unet(input_shape, nb_filters, number_class)
     for l in range(1, len(net.layers)):
         new_model.layers[l].set_weights(net.layers[l].get_weights())
-    print('Loaded weights for testing model.')
+    print('Loaded weights for testing model', str(run))
     patch_t = []
     start_test = time.time()
     for i in range(0,num_patches_y):
+        print('[' + str(i) + '/' + str(num_patches_y) + ']', end='\r')
         for j in range(0,num_patches_x):
             patch = image1_pad[patch_size_rows*j:patch_size_rows*(j+1), patch_size_cols*i:patch_size_cols*(i+1), :]
             predictions_ = new_model.predict(np.expand_dims(patch, axis=0)) 

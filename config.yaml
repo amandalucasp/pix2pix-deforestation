@@ -74,3 +74,4 @@ type_norm_unet: 1
 lr_unet: 0.001 
 beta1_unet: 0.9
 augment_data: False
+run_inference_on_cpu: True
