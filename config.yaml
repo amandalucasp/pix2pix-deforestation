@@ -75,3 +75,4 @@ lr_unet: 0.001
 beta1_unet: 0.9
 augment_data: False
 run_inference_on_cpu: True
+unet_testing_path: 'C:/Users/amandalucs/Documents/Github/unet-results/2022_03_11_21_05_47_augmented'

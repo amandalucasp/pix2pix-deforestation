@@ -7,8 +7,6 @@ import os
 from utils_unet import *
 from utils import *
 
-unet_path = 'C:/Users/amandalucs/Documents/Github/unet-results/2022_03_11_21_05_47_augmented'
-
 seed = 0
 np.random.seed(seed)
 tf.random.set_seed(seed)
@@ -16,12 +14,10 @@ tf.random.set_seed(seed)
 stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 
-output_folder = unet_path + '/test/'
-os.makedirs(output_folder, exist_ok=True)
-
 if config['run_inference_on_cpu']:
     os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
+unet_path = config['unet_testing_path']
 batch_size = config['batch_size_unet']
 epochs = config['epochs_unet']
 nb_filters = config['nb_filters']
@@ -30,6 +26,9 @@ patience_value = config['patience_value']
 type_norm_unet = config['type_norm_unet']
 number_class = 2 
 tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
+
+output_folder = unet_path + '/test/'
+os.makedirs(output_folder, exist_ok=True)
 
 print('[*] Loading image array...')
 image_array, final_mask, _ = get_dataset(config)
