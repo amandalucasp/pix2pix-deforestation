@@ -141,6 +141,55 @@ def resGenerator(input_shape=[256, 256, 3], ngf=64, last_act='tanh', n_residuals
     return model
 
 
+def Generator_128(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, drop_blocs=0):
+  inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
+
+  down_stack = [
+    downsample(ngf, 4, apply_batchnorm=False),  # (batch_size, 128, 128, 64) 64, 64, 32 
+    downsample(ngf * 2, 4),  # (batch_size, 64, 64, 128) 32, 32, 64
+    downsample(ngf * 4, 4),  # (batch_size, 32, 32, 256) 16, 16, 128
+    downsample(ngf * 8, 4),  # (batch_size, 16, 16, 512) 8, 8, 256
+    downsample(ngf * 8, 4),  # (batch_size, 8, 8, 512) 4, 4, 256
+    downsample(ngf * 8, 4),  # (batch_size, 4, 4, 512) 2, 2, 256
+    downsample(ngf * 8, 4, apply_batchnorm=False) #,  # (batch_size, 2, 2, 512) 1, 1, 256
+  ]
+
+  up_stack = [
+    upsample(ngf * 8, 4, apply_dropout=True),  # (batch_size, 2, 2, 512) -> 1024 
+    upsample(ngf * 8, 4, apply_dropout=True),  # (batch_size, 4, 4, 512) -> 1024
+    upsample(ngf * 8, 4, apply_dropout=True),  # (batch_size, 8, 8, 512) -> 1024
+    upsample(ngf * 4, 4),  # (batch_size, 16, 16, 512) -> 1024
+    upsample(ngf * 2, 4),  # (batch_size, 32, 32, 256) -> 512
+    upsample(ngf, 4),  # (batch_size, 64, 64, 128) -> 256
+  ]
+
+  initializer = tf.random_normal_initializer(0., 0.02)
+  last = tf.keras.layers.Conv2DTranspose(OUTPUT_CHANNELS, 4,
+                                         strides=2,
+                                         padding='same',
+                                         kernel_initializer=initializer,
+                                         activation='tanh')  # (batch_size, 256, 256, 3)
+
+  x = inputs
+
+  # Downsampling through the model
+  skips = []
+  for down in down_stack:
+    x = down(x)
+    skips.append(x)
+
+  skips = reversed(skips[:-1]) # last layer is connected directly to the decoders
+
+  # Upsampling and establishing the skip connections
+  for up, skip in zip(up_stack, skips):
+    x = up(x)
+    x = tf.keras.layers.Concatenate()([x, skip])
+
+  x = last(x)
+
+  return tf.keras.Model(inputs=inputs, outputs=x)
+
+
 def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, drop_blocs=0):
   inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
 
@@ -218,6 +267,8 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, 
 
 if config['residual_generator']:
   generator = resGenerator(input_shape, ngf)
+elif config['generator_128']:
+  generator = Generator_128(input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
 else:
   generator = Generator(input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
 
@@ -391,7 +442,7 @@ def res_train_step(input_image, target, step):
 
 
 @tf.function
-def train_step(input_image, target, step, gen_loss_type='default'):
+def train_step(input_image, target, step, config, gen_loss_type='default'):
   with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
     gen_output = generator(input_image, training=True) 
 
@@ -400,16 +451,13 @@ def train_step(input_image, target, step, gen_loss_type='default'):
 
     gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type)
     disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
+    if config['slow_discriminator'] == True:
+      disc_loss = 0.5 * disc_loss
 
   generator_gradients = gen_tape.gradient(gen_total_loss,
                                           generator.trainable_variables)
   discriminator_gradients = disc_tape.gradient(disc_loss,
                                                discriminator.trainable_variables)
-
-  if config['slow_discriminator']:
-    # otimiza os parametros do gerador 2 vezes em um mesmo loop
-    generator_optimizer.apply_gradients(zip(generator_gradients,
-                                            generator.trainable_variables))
 
   generator_optimizer.apply_gradients(zip(generator_gradients,
                                             generator.trainable_variables))                                      
@@ -447,7 +495,7 @@ def fit(train_ds, test_ds, config):
     if config['residual_generator']:
       gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = res_train_step(input_image, target, step)
     else:
-      gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = train_step(input_image, target, step, gen_loss_type=config['gen_loss_type'])
+      gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = train_step(input_image, target, step, config, gen_loss_type=config['gen_loss_type'])
 
     # Training step
     if (step+1) % 10 == 0:
