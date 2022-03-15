@@ -57,14 +57,11 @@ num_patches_x = int(h/patch_size_rows)
 num_patches_y = int(w/patch_size_cols)
 input_shape=(patch_size_rows,patch_size_cols, c)
 
-weights = [0.2, 0.8]
-loss = weighted_categorical_crossentropy(weights)
-
 time_ts = []
 for run in range(0, number_runs):
-    current_model = unet_path + '/checkpoints/model_' + str(run)
-    net = tf.keras.models.load_model(current_model, custom_objects={"loss": loss})
-    # net.summary()
+    current_model = unet_path + '/checkpoints/model_' + str(run) + '.h5'
+    net = tf.keras.models.load_model(current_model, compile=False)
+    net.summary()
     # testing the model
     new_model = build_unet(input_shape, nb_filters, number_class)
     for l in range(1, len(net.layers)):

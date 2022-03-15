@@ -56,7 +56,8 @@ if config['synthetic_data_path'] != '':
 if config['augment_data']:
   output_folder = output_folder + '_classic_data_augmentation'
 os.makedirs(output_folder, exist_ok = True)
-os.makedirs(output_folder + '/checkpoints', exist_ok=True)
+path_models = output_folder + '/checkpoints'
+os.makedirs(path_models, exist_ok=True)
 shutil.copy('./config.yaml', output_folder)
 
 
@@ -123,8 +124,9 @@ for run in range(0, number_runs):
 
   start_training = time.time()
   earlystop = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=config['patience_value'], verbose=1, mode='min')
+  checkpoint = ModelCheckpoint(path_models + '/model_' + str(run) + '.h5', monitor='val_loss', verbose=1, save_best_only=True, mode='min')
   lr_reduce = ReduceLROnPlateau(factor=0.9, min_delta=0.0001, patience=5, verbose=1)
-  callbacks_list = [earlystop]
+  callbacks_list = [earlystop, checkpoint]
 
   print('Running fit.')
   history = net.fit_generator(train_generator,
@@ -135,11 +137,6 @@ for run in range(0, number_runs):
     validation_steps=validation_steps)
   end_training = time.time() - start_training
   time_tr.append(end_training)
-
-  name = '/checkpoints/model_' + str(run)
-  name = output_folder + name
-  print('name:', name)
-  net.save(name)
 
   fig = plt.figure(figsize=(8, 8))
   plt.subplot(2, 1, 1)
