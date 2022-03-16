@@ -224,3 +224,37 @@ def upsample(filters, size, apply_dropout=False):
       result.add(tf.keras.layers.Dropout(0.5))
   result.add(tf.keras.layers.ReLU())
   return result
+
+
+def res_encoder_block(input_data, n_filters, k_size=3, strides=2, activation='relu', padding='same', SN=False, batchnorm=True, name='None'):
+    # weight initialization
+    init = tf.random_normal_initializer(0., 0.02)
+    if SN:
+        x = ConvSN2D(n_filters, k_size, strides=strides, padding=padding, kernel_initializer=init, name=name+'_convSN2D')(input_data)
+    else:
+        x = tf.keras.layers.Conv2D(n_filters, k_size, strides=strides, padding=padding, kernel_initializer=init, name=name+'_conv2D')(input_data)
+
+    if batchnorm:
+        x = tf.keras.layers.BatchNormalization(momentum=0.8, name=name+'_bn')(x, training=True)
+    if activation is 'LReLU':
+        x = tf.keras.layers.LeakyReLU(alpha=0.2, name=name+'_act_LReLU')(x)        
+    else:
+        x = tf.keras.layers.Activation('relu', name=name+'_act_relu')(x)
+    return x
+
+
+def res_decoder_block(input_data, n_filters, k_size=3, strides=2, padding='same', name='None'):
+    # weight initialization
+    init = tf.random_normal_initializer(0., 0.02)
+    x = tf.keras.layers.Conv2DTranspose(n_filters, k_size, strides=strides, padding=padding, kernel_initializer=init, name=name+'_deconv2D')(input_data)
+    x = tf.keras.layers.BatchNormalization(momentum=0.8, name=name+'_bn')(x, training=True)
+    x = tf.keras.layers.Activation('relu', name=name+'_act_relu')(x)
+    return x
+
+
+def residual_block(input_x, n_kernels, name='name'):
+    x = res_encoder_block(input_x, n_kernels, strides=1, name=name+'rba')
+    x = tf.keras.layers.Dropout(0.5, name=name+'drop')(x, training=True)
+    x = res_encoder_block(x, n_kernels,  strides=1, activation='linear', name=name+'rbb')
+    x = tf.keras.layers.Add(name=name+'concatenate')([x, input_x])
+    return x
