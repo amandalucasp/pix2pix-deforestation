@@ -55,8 +55,10 @@ if config['save_tiles']:
         y2 = np.max(cols)
         tile_img = image_array[x1:x2 + 1, y1:y2 + 1, :]
         tile_ref = final_mask[x1:x2 + 1, y1:y2 + 1]
+        tile_ref_acc = accumulated_deforestation_mask[x1:x2 + 1, y1:y2 + 1]
         np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.npy', tile_img)
         np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_ref.npy', tile_ref)
+        np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_ref_acc.npy', tile_ref_acc)
         if config['change_detection']:
             h, w, c = tile_img.shape
             if c > 3:
@@ -70,7 +72,7 @@ if config['save_tiles']:
 print("[*] EXTRACTING PATCHES")
 
 print('Extracting training patches')
-patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config, save_rejected=True)
+patches_trn, patches_trn_ref, patches_trn_ref_acc = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config, save_rejected=True)
 if not config['load_scaler']:
     patches_trn, train_scaler = normalize_img_array(patches_trn, config['type_norm'])
     joblib.dump(train_scaler, config['output_path'] + '/minmax_scaler.bin', compress=True)
@@ -80,10 +82,10 @@ else:
     patches_trn, _ = normalize_img_array(patches_trn, config['type_norm'], scaler=train_scaler)
 
 print('Extracting validation patches')
-patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config)
+patches_val, patches_val_ref, patches_val_ref_acc = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config)
 patches_val, _ = normalize_img_array(patches_val, config['type_norm'], scaler=train_scaler)
 print('Extracting test patches')
-patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config)
+patches_tst, patches_tst_ref, patches_tst_ref_acc = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config)
 patches_tst, _ = normalize_img_array(patches_tst, config['type_norm'], scaler=train_scaler)
 del image_array, final_mask
 
@@ -92,11 +94,8 @@ print(np.min(patches_trn), np.max(patches_trn))
 print(np.min(patches_val), np.max(patches_val))
 print(np.min(patches_tst), np.max(patches_tst))
 
-#if config['type_norm'] == 3: # normalizing between [-1, +1]
-    #patches_trn_ref = patches_trn_ref - 1
-    #patches_val_ref = patches_val_ref - 1
-    #patches_tst_ref = patches_tst_ref - 1
 print('Ref values:', np.unique(patches_trn_ref), np.unique(patches_val_ref), np.unique(patches_tst_ref))
+print('Ref Acc values:', np.unique(patches_trn_ref_acc), np.unique(patches_val_ref_acc), np.unique(patches_tst_ref_acc))
 
 print('Scaler params:')
 print(train_scaler.min_)
@@ -112,17 +111,20 @@ print('[*] Testing patches:', patches_tst.shape)
 if config['save_patches']:
     os.makedirs(trn_out_path + '/imgs', exist_ok=True)
     os.makedirs(trn_out_path + '/masks', exist_ok=True)
+    os.makedirs(trn_out_path + '/masks_acc', exist_ok=True)
     os.makedirs(val_out_path + '/imgs', exist_ok=True)
     os.makedirs(val_out_path + '/masks', exist_ok=True)
+    os.makedirs(val_out_path + '/masks_acc', exist_ok=True)
     os.makedirs(tst_out_path + '/imgs', exist_ok=True)
     os.makedirs(tst_out_path + '/masks', exist_ok=True)
+    os.makedirs(tst_out_path + '/masks_acc', exist_ok=True)
     print("[*] SAVING PATCHES")
     print('Saving training patches...')
-    write_patches_to_disk(patches_trn, patches_trn_ref, trn_out_path)
+    write_patches_to_disk(patches_trn, patches_trn_ref, patches_trn_ref_acc, trn_out_path)
     print('Saving validation patches...')
-    write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
+    write_patches_to_disk(patches_val, patches_val_ref, patches_val_ref_acc, val_out_path)
     print('Saving testing patches...')
-    write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
+    write_patches_to_disk(patches_tst, patches_tst_ref, patches_tst_ref_acc, tst_out_path)
 
 ################### COMBINE PATCHES INTO INPUT FORMAT FOR PIX2PIX
 
