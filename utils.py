@@ -319,11 +319,12 @@ def check_patch_class(patch):
         return None
 
 
-def write_patches_to_disk(patches, patches_ref, out_path):
+def write_patches_to_disk(patches, patches_ref, patches_ref_acc, out_path):
     counter = 0
     for i in range(patches.shape[0]):
         np.save(out_path + '/imgs/' + str(i) + '.npy', patches[i])
         np.save(out_path + '/masks/' + str(i) + '.npy', patches_ref[i])
+        np.save(out_path + '/masks_acc/' + str(i) + '.npy', patches_ref_acc[i])
         counter += 1
 
 
@@ -331,25 +332,17 @@ def discard_patches_by_percentage(patches, patches_ref, patches_ref_acc, config,
     # 0: forest, 1: new deforestation, 2: old deforestation
     patch_size = config['patch_size']
     percentage = config['min_percentage']
-    patches_ = []
-    patches_ref_ = []
-    rejected_patches_ = []
-    rejected_patches_ref = []
-    # rejected_pixels_count = []
+    patches_selected = []
+    rejected_patches = []
     for i in range(len(patches)):
         patch_ref = patches_ref[i]
         class1 = patch_ref[patch_ref == new_deforestation_pixel_value]
         per = int((patch_size ** 2) * (percentage / 100)) 
-        # print(len(class1), per)
         if len(class1) >= per:
-            patches_.append(i)
-            patches_ref_.append(i)
+            patches_selected.append(i)
         else:
-            # print('descartado')
-            rejected_patches_.append(i)
-            rejected_patches_ref.append(i) 
-            # rejected_pixels_count.append(len(class1))
-    return patches[patches_], patches_ref[patches_ref_], patches[rejected_patches_], patches_ref[rejected_patches_ref], patches_ref_acc[rejected_patches_ref]
+            rejected_patches.append(i)
+    return patches[patches_selected], patches_ref[patches_selected], patches_ref_acc[patches_selected], patches[rejected_patches], patches_ref[rejected_patches], patches_ref_acc[rejected_patches]
 
 
 def retrieve_idx_percentage(reference, patches_idx_set, patch_size, pertentage = 5):
@@ -424,7 +417,8 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, accumulated_deforest
     rej_out_path = config['output_path'] + '/rejected_patches_npy/'
     os.makedirs(rej_out_path, exist_ok=True)
     patches_out = []
-    label_out = []
+    patches_ref_2019 = []
+    patches_ref_acc = []
     counter = 0
     for num_tile in tiles:
         print(num_tile)
@@ -440,17 +434,19 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, accumulated_deforest
         tile_ref_acc = accumulated_deforestation_mask[x1:x2 + 1, y1:y2 + 1]
         _, patch_ref_acc = extract_patches(tile_img, tile_ref_acc, patch_size, stride)
         # descarta por %
-        patches_img, patch_ref, rej_patches, rej_patches_ref, rej_patches_ref_accumulated = discard_patches_by_percentage(patches_img, patch_ref, patch_ref_acc, config)
+        patches_img, patch_ref, patch_ref_acc, rej_patches, rej_patches_ref, rej_patches_ref_accumulated = discard_patches_by_percentage(patches_img, patch_ref, patch_ref_acc, config)
         # salva os patches rejeitados
         if save_rejected:
             np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_img.npy', rej_patches) 
             np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref.npy', rej_patches_ref)
             np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref_accumulated.npy', rej_patches_ref_accumulated)
         patches_out.append(patches_img)
-        label_out.append(patch_ref)
+        patches_ref_2019.append(patch_ref)
+        patches_ref_acc.append(patch_ref_acc)
     patches_out = np.concatenate(patches_out)
-    label_out = np.concatenate(label_out)
-    return patches_out, label_out
+    patches_ref_2019 = np.concatenate(patches_ref_2019)
+    patches_ref_acc = np.concatenate(patches_ref_acc)
+    return patches_out, patches_ref_2019, patches_ref_acc
 
 
 def save_npy_array(np_array, out_path):
