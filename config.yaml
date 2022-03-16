@@ -58,7 +58,7 @@ drop_blocs: 0 # blocks to be dropped in encoder/decoder; maximum supported (alth
 synthetic_masks_path: 'trained_pix2pix_input/'
 pix2pix_output_path: ''
 slow_discriminator: False # if True, Generator params are optimized twice in the same training loop
-generator_128: True
+fix_erratas: True
 
 # TRAINING PARAMETERS - UNET
 unet_data_path: '/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/'

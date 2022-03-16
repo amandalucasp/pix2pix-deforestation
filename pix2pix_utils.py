@@ -191,72 +191,20 @@ def set_shapes(img, label, img_shape, label_shape):
   return img, label
 
 
-def res_encoder_block(input_data, n_filters, k_size=3, strides=2, activation='relu', padding='same', SN=False, batchnorm=True, name='None'):
-    # weight initialization
-    init = tf.random_normal_initializer(0., 0.02)
-    if SN:
-        x = ConvSN2D(n_filters, k_size, strides=strides, padding=padding, kernel_initializer=init, name=name+'_convSN2D')(input_data)
-    else:
-        x = tf.keras.layers.Conv2D(n_filters, k_size, strides=strides, padding=padding, kernel_initializer=init, name=name+'_conv2D')(input_data)
-    
-    if batchnorm:
-        x = tf.keras.layers.BatchNormalization(momentum=0.8, name=name+'_bn')(x, training=True)
-    if activation is 'LReLU':
-        x = tf.keras.layers.LeakyReLU(alpha=0.2, name=name+'_act_LReLU')(x)        
-    else:
-        x = tf.keras.layers.Activation('relu', name=name+'_act_relu')(x)
-    return x
-
-
-def res_decoder_block(input_data, n_filters, k_size=3, strides=2, padding='same', name='None'):
-    # weight initialization
-    init = tf.random_normal_initializer(0., 0.02)
-    x = tf.keras.layers.Conv2DTranspose(n_filters, k_size, strides=strides, padding=padding, kernel_initializer=init, name=name+'_deconv2D')(input_data)
-    x = tf.keras.layers.BatchNormalization(momentum=0.8, name=name+'_bn')(x, training=True)
-    x = tf.keras.layers.Activation('relu', name=name+'_act_relu')(x)
-    return x
-
-
-def residual_block(input_x, n_kernels, name='name'):
-    x = res_encoder_block(input_x, n_kernels, strides=1, name=name+'rba')
-    x = tf.keras.layers.Dropout(0.5, name=name+'drop')(x, training=True)
-    x = res_encoder_block(x, n_kernels,  strides=1, activation='linear', name=name+'rbb')
-    x = tf.keras.layers.Add(name=name+'concatenate')([x, input_x])
-    return x
-
-
-def cross_entropy_loss(labels, logits):
-    loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels))
-    return loss
-
-
-def lsgan_loss(labels, logits):
-        loss = tf.reduce_mean(tf.math.squared_difference(logits, labels))
-        return loss 
-    
-    
-def l1_loss(a, b):
-    loss = tf.reduce_mean(tf.math.abs(a - b))
-    return loss
-
-
-def downsample(filters, size, apply_batchnorm=True, strides=2, padding_mode='same', sn=False):
+def downsample(filters, size, apply_batchnorm=True, strides=2, padding_mode='same'):
   initializer = tf.random_normal_initializer(0., 0.02)
   result = tf.keras.Sequential()
-  if sn:
-    # nao funciona em tf2
-    result.add(
-      tf.keras.layers.ConvSN2D(filters, size, strides=strides, padding=padding_mode,
-                             kernel_initializer=initializer, use_bias=False))
-  else:
+  if apply_batchnorm:
     result.add(
         tf.keras.layers.Conv2D(filters, size, strides=strides, padding=padding_mode,
-                             kernel_initializer=initializer, use_bias=False))
-  if apply_batchnorm:
-    # teste affine-layer
+                             kernel_initializer=initializer, use_bias=False)) # use_bias = True is redundant when using BN
     result.add(tf.keras.layers.BatchNormalization(epsilon=1e-5,
                                                   momentum=0.1,
                                                   gamma_initializer=tf.random_normal_initializer(1.0, 0.02)))
+  else:
+    result.add(
+        tf.keras.layers.Conv2D(filters, size, strides=strides, padding=padding_mode,
+                             kernel_initializer=initializer))
   result.add(tf.keras.layers.LeakyReLU(alpha=0.2))
   return result
 
@@ -269,9 +217,6 @@ def upsample(filters, size, apply_dropout=False):
                                     padding='same',
                                     kernel_initializer=initializer,
                                     use_bias=False))
-  #result.add(tf.keras.layers.BatchNormalization(momentum=0.8,
-  #                                                gamma_initializer=tf.random_normal_initializer(1.0, 0.02)))
-  # affine-layer:
   result.add(tf.keras.layers.BatchNormalization(epsilon=1e-5,
                                                   momentum=0.1,
                                                   gamma_initializer=tf.random_normal_initializer(1.0, 0.02)))
@@ -279,29 +224,3 @@ def upsample(filters, size, apply_dropout=False):
       result.add(tf.keras.layers.Dropout(0.5))
   result.add(tf.keras.layers.ReLU())
   return result
-
-
-def residual_block_v1(filters, size, apply_batchnorm=True, padding_mode='same'):
-    # x = encoder_block(input_x, filters, strides=1, name=name+'rba')
-    # x = Dropout(0.5, name=name+'drop')(x, training=True)
-    # x = encoder_block(x, filters,  strides=1, activation='linear', name=name+'rbb')
-    # x = Add(name=name+'concatenate')([x, input_x])
-    result = tf.keras.Sequential()
-    # encoder 1
-    initializer = tf.random_normal_initializer(0., 0.02)
-    result.add(
-      tf.keras.layers.Conv2D(filters, size, strides=1, padding=padding_mode,
-                             kernel_initializer=initializer, use_bias=False))
-    if apply_batchnorm:
-      result.add(tf.keras.layers.BatchNormalization(momentum=0.8))
-    result.add(tf.keras.layers.ReLU())
-    # dropout
-    result.add(tf.keras.layers.Dropout(0.5))
-    # encoder 2
-    result.add(
-      tf.keras.layers.Conv2D(filters, size, strides=1, padding=padding_mode,
-                             kernel_initializer=initializer, use_bias=False))
-    if apply_batchnorm:
-      result.add(tf.keras.layers.BatchNormalization(momentum=0.8))
-    result.add(tf.keras.layers.ReLU())
-    return result

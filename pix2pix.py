@@ -108,39 +108,6 @@ print(test_ds.element_spec)
 print(test_ds)
 
 
-def resGenerator(input_shape=[256, 256, 3], ngf=64, last_act='tanh', n_residuals=9, summary=False, model_file=None, name='gan_g_'):
-
-    init = tf.random_normal_initializer(0., 0.02)
-    n_rows = input_shape[0]
-    n_cols = input_shape[1]
-    in_c_dims = input_shape[2]
-    out_c_dims = input_shape[2]
-
-    input_shape = (n_rows, n_cols, in_c_dims)
-    input_layer = tf.keras.layers.Input(shape=input_shape, name=name+'_input')
-    
-    x = input_layer
-    #(input_data, n_filters, k_size=3, strides=2, activation='relu', padding='same', SN=False, batchnorm=True, name='None')
-    x = res_encoder_block(x, 1*ngf, k_size=7, strides=1, batchnorm=False, name=name+'_e1')
-    x = res_encoder_block(x, 2*ngf, name=name+'e2') # rows/2, cols/2
-    x = res_encoder_block(x, 4*ngf, name=name+'e3') # rows/4, cols/4
-
-    for i in range(n_residuals):
-        x = residual_block(x, n_kernels=4*ngf, name=name+str(i+1)+'_')  # rows/4, cols/4
-
-    # (input_data, n_filters, k_size=3, strides=2, padding='same', name='None')
-    x = res_decoder_block(x, 2*ngf, name=name+'d1') # rows/2, cols/2            
-    x = res_decoder_block(x, 1*ngf, name=name+'d2') # rows, cols
-    x = tf.keras.layers.Conv2D(OUTPUT_CHANNELS, 7, padding='same',  kernel_initializer=init, name=name+'d_out')(x)   # rows, cols
-
-    output = tf.keras.layers.Activation(last_act, name=name+last_act)(x)
-
-    model = tf.keras.Model(inputs=[input_layer], outputs=[output], name='Generator'+name[-3:])
-    if (summary):
-        model.summary()
-    return model
-
-
 def Generator_128(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, drop_blocs=0):
   inputs = tf.keras.layers.Input(shape=[input_shape[0], input_shape[1], input_shape[2]])
 
@@ -265,9 +232,7 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, 
   return tf.keras.Model(inputs=inputs, outputs=x)
 
 
-if config['residual_generator']:
-  generator = resGenerator(input_shape, ngf)
-elif config['generator_128']:
+if config['fix_erratas']:
   generator = Generator_128(input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
 else:
   generator = Generator(input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
@@ -279,24 +244,38 @@ plt.imshow(gen_output[0].numpy()[:,:,config['debug_channels']]*0.5 + 0.5)
 fig.savefig(output_folder + '/gen_output.png')
 
 
-def resDiscriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64, name='d'):
-  init = tf.random_normal_initializer(0., 0.02)
+def Discriminator_128(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64):
+  initializer = tf.random_normal_initializer(0., 0.02)
+
   inp = tf.keras.layers.Input(shape=input_shape, name='input_image')
   tar = tf.keras.layers.Input(shape=target_shape, name='target_image')
-  d = tf.keras.layers.concatenate([inp, tar], axis=3)
+
+  x = tf.keras.layers.concatenate([inp, tar], axis=3)  # (batch_size, 256, 256, channels*2)
+
+  # layer_1
+  x = tf.pad(x, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT")
+  down1 = downsample(ndf, 4, apply_batchnorm=False, strides=2, padding_mode='valid')(x)  # (batch_size, 128, 128, 64) 64, 64, 32
+  # layer_2
+  down1_pad = tf.pad(down1, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT") 
+  down2 = downsample(ndf * 2, 4, padding_mode='valid')(down1_pad)  # (batch_size, 64, 64, 128) 32, 32, 64
+  # layer_3
+  down2_pad = tf.pad(down2, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT") 
+  down3 = downsample(ndf * 4, 4, padding_mode='valid')(down2_pad)  # (batch_size, 32, 32, 256) 16, 16, 128
+  # layer_4
+  down3_pad = tf.pad(down3, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT")   # (batch_size, 34, 34, 256) 18, 18, 128
+  conv = tf.keras.layers.Conv2D(ndf * 8, 4, strides=1,
+                                kernel_initializer=initializer,
+                                use_bias=False)(down3_pad)  # (batch_size, 31, 31, 512) 15, 15, 256
+  batchnorm1 = tf.keras.layers.BatchNormalization(epsilon=1e-5,
+                                                  momentum=0.1,
+                                                  gamma_initializer=tf.random_normal_initializer(1.0, 0.02))(conv)
+  leaky_relu = tf.keras.layers.LeakyReLU(alpha=0.2)(batchnorm1)
+  # layer_5
+  down4_pad = tf.pad(leaky_relu, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT")   # (batch_size, 33, 33, 512) 17, 17, 256
+  last = tf.keras.layers.Conv2D(1, 4, strides=1,
+                                kernel_initializer=initializer)(down4_pad) 
   
-  d = res_encoder_block(d, 1*ndf, k_size=4, activation='LReLU', SN=False, batchnorm=False, name=name+'_1')
-  d = res_encoder_block(d, 2*ndf, k_size=4, activation='LReLU', SN=False, batchnorm=False, name=name+'_2')
-  d = res_encoder_block(d, 4*ndf, k_size=4, activation='LReLU', SN=False, batchnorm=False, name=name+'_3')
-
-  d = tf.keras.layers.ZeroPadding2D()(d)
-  d = res_encoder_block(d, 8*ndf, k_size=4, activation='LReLU', strides=1, SN=False, batchnorm=False, padding='valid', name=name+'_4')
-  d = tf.keras.layers.ZeroPadding2D()(d)
-  logits = tf.keras.layers.Conv2D(1, (4,4), padding='valid', kernel_initializer=init, name=name+'_conv2D_5')(d)
-  out = tf.keras.layers.Activation('sigmoid', name=name+'_act_sigmoid')(logits)
-
-  model = tf.keras.Model(inputs=[inp, tar], outputs=[out, logits])
-  return model
+  return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
 
 def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64):
@@ -327,13 +306,12 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64)
   down4_pad = tf.keras.layers.ZeroPadding2D()(leaky_relu)  # (batch_size, 33, 33, 512) 17, 17, 256
   last = tf.keras.layers.Conv2D(1, 4, strides=1,
                                 kernel_initializer=initializer)(down4_pad)
-                                #activation='sigmoid')(down4_pad) # affine-layer
   
   return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
 
-if config['residual_generator']:
-  discriminator = resDiscriminator(input_shape, target_shape, ndf)
+if config['fix_erratas']:
+  discriminator = Discriminator_128(input_shape, target_shape, ndf)
 else:
   discriminator = Discriminator(input_shape, target_shape, ndf)
 disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
@@ -407,41 +385,6 @@ def discriminator_loss(disc_real_output, disc_generated_output):
 
 
 @tf.function
-def res_train_step(input_image, target, step):
-  with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-    gen_output = generator(input_image, training=True) 
-    disc_real_output, disc_real_logits = discriminator([input_image, target], training=True)
-    disc_generated_output, disc_fake_logits = discriminator([input_image, gen_output], training=True)
-    # discriminator loss
-    d_loss_real = lsgan_loss(tf.ones_like(disc_real_output), disc_real_logits)
-    d_loss_fake = lsgan_loss(tf.zeros_like(disc_real_output), disc_fake_logits)
-    disc_loss = (d_loss_real + d_loss_fake) / 2.0
-    # reconstruction loss
-    gen_l1_loss = LAMBDA * l1_loss(target, gen_output)
-    # generator loss
-    gen_gan_loss = lsgan_loss(tf.ones_like(disc_generated_output), disc_fake_logits)
-    gen_total_loss =  gen_gan_loss + gen_l1_loss
-
-  generator_gradients = gen_tape.gradient(gen_total_loss,
-                                          generator.trainable_variables)
-  discriminator_gradients = disc_tape.gradient(disc_loss,
-                                               discriminator.trainable_variables)
-
-  generator_optimizer.apply_gradients(zip(generator_gradients,
-                                          generator.trainable_variables))
-  discriminator_optimizer.apply_gradients(zip(discriminator_gradients,
-                                              discriminator.trainable_variables))
-
-  with summary_writer.as_default():
-    tf.summary.scalar('gen_total_loss', gen_total_loss, step=step//1000)
-    tf.summary.scalar('gen_gan_loss', gen_gan_loss, step=step//1000)
-    tf.summary.scalar('gen_l1_loss', gen_l1_loss, step=step//1000)
-    tf.summary.scalar('disc_loss', disc_loss, step=step//1000)
-  
-  return gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss
-
-
-@tf.function
 def train_step(input_image, target, step, config, gen_loss_type='default'):
   with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
     gen_output = generator(input_image, training=True) 
@@ -492,10 +435,7 @@ def fit(train_ds, test_ds, config):
       plot_imgs(generator, test_ds, out_dir, counter)
       counter +=5000
 
-    if config['residual_generator']:
-      gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = res_train_step(input_image, target, step)
-    else:
-      gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = train_step(input_image, target, step, config, gen_loss_type=config['gen_loss_type'])
+    gen_total_loss, gen_gan_loss, gen_l1_loss, disc_loss = train_step(input_image, target, step, config, gen_loss_type=config['gen_loss_type'])
 
     # Training step
     if (step+1) % 10 == 0:
@@ -541,6 +481,7 @@ if args.train:
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
     save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
     counter+=1
+
 
 if args.test:
   os.makedirs(output_folder + '/generated_plots_test/')
