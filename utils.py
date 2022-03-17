@@ -15,6 +15,20 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 np.random.seed(0)
 
+
+def load_npy_file(img_file):
+    start = time.time()
+    npy_img = np.load(img_file)
+    elapsed = time.time() - start
+    print(os.path.basename(img_file), elapsed)
+    start = time.time()
+    ref_file = img_file.replace('_img', '_ref')
+    npy_ref = np.load(ref_file)
+    elapsed = time.time() - start
+    print(os.path.basename(ref_file), elapsed)
+    return npy_img, npy_ref
+
+
 def load_npy_files(files_list):
     npys_imgs = []
     npys_refs = []
@@ -569,7 +583,6 @@ def save_npy_array(np_array, out_path):
     else:
         print('Empty array')
         return
-
 
 
 def filter_outliers(img, bins=1000000, bth=0.001, uth=0.999, mask=[0]):
