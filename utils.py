@@ -227,35 +227,40 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
     h, w, c = patches_list[0].shape
 
     if config['change_detection']:
-            # T1 + T2 + 3-classes mask
-            for i in range(patches_list.shape[0]):
-                # combined will be: T1 - T2 - mask
-                combined = np.zeros(shape=(h,w*3,c//2)) # 128x(128*3)xc//2
-                combined[:,:w,:] = patches_list[i][:,:,:c//2] # t1
+        # T1 + T2 + 3-classes mask
+        for i in range(patches_list.shape[0]):
+            # combined will be: T1 - T2 - mask
+            combined = np.zeros(shape=(h,w*3,c//2)) 
+            t1_image = patches_list[i][:,:,:c//2]
+
+            if not synthetic_input_pairs:
+                # if synthetic_input_pairs, T2 stays as zeros
+                t2_image = patches_list[i][:,:,c//2:]
+            else:
+                t2_image = np.zeros(shape=(h,w,c//2)) 
+
+            # mask
+            current_mask = np.expand_dims(patches_ref_list[i].copy(), axis=-1)
+            # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
+            while current_mask.shape[2] != c//2:
+                current_mask = np.concatenate((current_mask, np.expand_dims(patches_ref_list[i].copy(),axis=-1)), axis=-1)
+
+            combined[:,:w,:] = t1_image 
+            combined[:,w:w*2,:] = t2_image
+            combined[:,w*2:,:] = current_mask
+
+            np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
+
+            # salva imagens JPEG
+            if config['debug_mode']:
+                combined[:,:w,:] = (t1_image + 1) * 127.5
                 if not synthetic_input_pairs:
-                    # if synthetic_input_pairs, T2 stays as zeros
-                    combined[:,w:w*2,:] = patches_list[i][:,:,c//2:] # t2
-                # mask
-                converted = np.expand_dims(patches_ref_list[i].copy(), axis=-1) # 128x128x1
-                while converted.shape[2] != c//2:
-                    converted = np.concatenate((converted, np.expand_dims(patches_ref_list[i].copy(),axis=-1)), axis=-1)
-                #converted = array_reference # 128x128x(c//2)
-
-                if config['type_norm'] == 0: 
-                    converted[converted == 1] = 255/2
-                    converted[converted == 2] = 255
-                combined[:,w*2:,:] = converted
-
-                np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
-                if config['debug_mode']:
-                    if len(config['channels']) > 3:
-                        combined = combined[:,:,config['debug_channels']]
-                    if config['type_norm'] != 0:
-                        combined = (combined + 1) * 127.5
-                        if synthetic_input_pairs:
-                            combined[:,w:w*2,:] = 0
-                    cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
-                counter += 1
+                    combined[:,w:w*2,:] = (t2_image + 1) * 127.5
+                combined[:,w*2:,:] = current_mask * 127.55
+                if len(config['channels']) > 3:
+                    combined = combined[:,:,config['debug_channels']]
+                cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
+            counter += 1
     else:
         # T2 only
         for i in range(patches_list.shape[0]):
