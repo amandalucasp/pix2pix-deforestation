@@ -71,9 +71,9 @@ out_dir = output_folder + "/output_images/"
  
 train_files = sorted(glob.glob(str(npy_path / 'training_data/pairs/*.npy')))
 
-inp, re = load_npy(train_files[0])
-input_shape = [inp.shape[0], inp.shape[1], config['output_channels']] # 128x128x10 masked_t2
-target_shape = re.shape # 128x128x10 
+inp, re = load_npy_sample(train_files[0])
+input_shape = [inp.shape[0], inp.shape[1], config['output_channels'] + 1] # ex.: 128x128x10 + 1
+target_shape = re.shape # 128x128x10
 print('input_shape:', input_shape, np.min(inp), np.max(inp))
 print('target_shape:', target_shape, np.min(re), np.max(re))
 
@@ -451,7 +451,7 @@ if args.train:
   print(f'[*] Start training...')
   fit(train_ds, test_ds, config)
   print(f'[*] Time taken for training: {time.time()-start:.2f} sec\n')
-
+  
   os.makedirs(output_folder + '/generated_plots_test/')
   synthetic_path = output_folder + '/synthetic_data_test/'
 

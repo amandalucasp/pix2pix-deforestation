@@ -31,7 +31,7 @@ def draw_mask_contour(mask, real_t2):
   mask = mask.astype(np.uint8)
   # draw contours
   contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-  contour = max(contours, key = cv2.contourArea)
+  contour = contours[-1] 
   real_t2 = cv2.drawContours(real_t2, contour, -1, (0,255,0), 1)
   return real_t2
 
@@ -56,11 +56,11 @@ def generate_images(model, test_input, tar, filename=None):
   prediction = model(test_input, training=True)
   # prediction: fake t2
 
-  chans = [0, 1, 3, 10, 11, 13]
-  t1 = cv2.cvtColor(test_input[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)
+  chans = [0, 1, 3]
+  t1 = cv2.cvtColor(test_input[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
   mask = cv2.cvtColor(test_input[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB)
   real_t2 = cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
-  fake_t2 = cv2.cvtColor(prediction.numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+  fake_t2 = cv2.cvtColor(prediction[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
 
   fake_t2 = draw_mask_contour(mask, fake_t2)
   real_t2 = draw_mask_contour(mask, real_t2)
@@ -88,8 +88,8 @@ def plot_imgs(generator, test_ds, out_dir, counter):
     chans = [0, 1, 3, 10, 11, 13]
     t1 = cv2.cvtColor(inp[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)
     mask = cv2.cvtColor(inp[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB)
-    real_t2 = cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
-    fake_t2 = cv2.cvtColor(prediction.numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+    real_t2 = cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)
+    fake_t2 = cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)
 
     fake_t2 = draw_mask_contour(mask, fake_t2)
     real_t2 = draw_mask_contour(mask, real_t2)
@@ -130,7 +130,21 @@ def save_synthetic_img(t1_mask, t2_img, saving_path, filename):
   np.save(saving_path + '/masks/' + filename + '.npy', mask)
 
 
-# daqui pra baixo ok
+def load_npy_sample(npy_file):
+  image = np.load(npy_file)
+  w = image.shape[1]
+  w = w // 3
+  # image is T1 // T2 // mask
+  t1_image = image[:,:w, :]
+  t2_image = image[:,w:2*w,:]
+  mask_image = image[:,2*w:,:]
+
+  input_image = np.concatenate((t1_image, mask_image), axis=-1)
+  input_image = make_mask_2d(input_image)
+  real_image = t2_image
+  input_image = tf.cast(input_image, tf.float32)
+  real_image = tf.cast(real_image, tf.float32)
+  return input_image, real_image
 
 
 def load_npy(npy_file):
