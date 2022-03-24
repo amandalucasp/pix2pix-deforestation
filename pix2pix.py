@@ -456,8 +456,8 @@ def fit(train_ds, test_ds, config):
 
 
 if args.train:
-
-  checkpoint.restore(tf.train.latest_checkpoint(config['checkpoint_folder']))
+  if config['checkpoint_folder'] != '':
+    checkpoint.restore(tf.train.latest_checkpoint(config['checkpoint_folder']))
   start = time.time()
   print(f'[*] Start training...')
   fit(train_ds, test_ds, config)
