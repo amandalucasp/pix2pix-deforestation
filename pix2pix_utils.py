@@ -27,11 +27,11 @@ NUM_CHANNELS = config['output_channels']
 def draw_mask_contour(mask, real_t2):
   # get NEW DEFORESTATION mask 
   inp_mask = mask == 1
-  mask = tf.cast(inp_mask, tf.float32).numpy().squeeze()[:, :, -1]
+  mask = tf.cast(inp_mask, tf.float32).numpy() #.squeeze()[:, :, -1]
   mask = mask.astype(np.uint8)
   # draw contours
   contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-  contour = contours[-1] 
+  contour = contours[0] 
   real_t2 = cv2.drawContours(real_t2, contour, -1, (0,255,0), 1)
   return real_t2
 
@@ -56,22 +56,29 @@ def generate_images(model, test_input, tar, filename=None):
   prediction = model(test_input, training=True)
   # prediction: fake t2
 
-  chans = [0, 1, 3]
-  t1 = cv2.cvtColor(test_input[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+  chans = [0, 1, 2]
+  t1 = test_input[0].numpy()[:,:,chans]#, cv2.COLOR_BGR2RGB)
   mask = cv2.cvtColor(test_input[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB)
-  real_t2 = cv2.cvtColor(tar[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
-  fake_t2 = cv2.cvtColor(prediction[0].numpy()[:,:,chans], cv2.COLOR_BGR2RGB)
+  real_t2 = tar[0].numpy()[:,:,chans]#, cv2.COLOR_BGR2RGB)
+  fake_t2 = prediction[0].numpy()[:,:,chans]#, cv2.COLOR_BGR2RGB)
 
-  fake_t2 = draw_mask_contour(mask, fake_t2)
-  real_t2 = draw_mask_contour(mask, real_t2)
-
-  plot_list = [t1, real_t2, fake_t2]
+  plot_list = [t1, real_t2, fake_t2, mask]
 
   if filename:
-    columns = 3
+    columns = 4
     rows = 1
-    title = ['T1', 'Real T2', 'Fake T2']
-    plot_image(plot_list, columns, rows, title, filename, pad=3)
+    pad = 1
+    title = ['T1', 'Real T2', 'Fake T2', 'Mask']
+    fig = plt.figure()
+    for i in range(0, columns*rows):
+      fig.add_subplot(rows, columns, i + 1)
+      plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
+      plt.title(title[i])
+      plt.imshow(plot_list[i]  * 0.5 + 0.5)
+    fig.tight_layout(pad=pad)
+    if filename:
+      fig.savefig(filename)
+    plt.close(fig)
 
   return prediction[0]
 
@@ -84,26 +91,33 @@ def plot_imgs(generator, test_ds, out_dir, counter):
     # inp: (t1, mask)
     # tar: real t2
     # prediciton: fake t2
-
-    chans = [0, 1, 3, 10, 11, 13]
-    t1 = cv2.cvtColor(inp[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)
+    chans = [0, 1, 2]
+    t1 = inp[0].numpy()[:,:,chans]#, cv2.COLOR_BGR2RGB)
     mask = cv2.cvtColor(inp[0].numpy()[:,:,-1], cv2.COLOR_BGR2RGB)
-    real_t2 = cv2.cvtColor(tar[0].numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)
-    fake_t2 = cv2.cvtColor(prediction.numpy()[:,:,chans[:3]], cv2.COLOR_BGR2RGB)
-
-    fake_t2 = draw_mask_contour(mask, fake_t2)
-    real_t2 = draw_mask_contour(mask, real_t2)
-
+    real_t2 = tar[0].numpy()[:,:,chans]#, cv2.COLOR_BGR2RGB)
+    fake_t2 = prediction.numpy()[:,:,chans]#, cv2.COLOR_BGR2RGB)
     plot_list.append(t1)
     plot_list.append(real_t2) # real t2
     plot_list.append(fake_t2) # fake t2
+    plot_list.append(mask)
     i+=1
 
-  columns = 3
+  columns = 4
   rows = 3
-  title = ['T1', 'Real T2', 'Fake T2']
+  pad = 1
+  title = ['T1', 'Real T2', 'Fake T2', 'Mask']
   filename = out_dir + str(counter) + '.png'
-  plot_image(plot_list, columns, rows, title, filename)
+  fig = plt.figure()
+  for i in range(0, columns*rows):
+    fig.add_subplot(rows, columns, i + 1)
+    plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
+    if i in [0, 1, 2, 3]:
+      plt.title(title[i])
+    plt.imshow(plot_list[i]  * 0.5 + 0.5)
+  fig.tight_layout(pad=pad)
+  if filename:
+    fig.savefig(filename)
+  plt.close(fig)
 
 
 def save_synthetic_img(t1_mask, t2_img, saving_path, filename):

@@ -53,6 +53,8 @@ OUTPUT_CHANNELS = config['output_channels']
 # Generator Loss Term
 ALPHA = config['alpha']
 BETA = config['beta']
+ALPHA = ALPHA / (ALPHA + BETA)
+BETA = 1.0 - ALPHA
 LAMBDA = config['lambda']
 GAN_WEIGHT = config['gan_weight']
 ngf = config['ngf']
@@ -355,24 +357,31 @@ def generator_loss(disc_generated_output, gen_output, target, input_image, gen_l
     return total_gen_loss, gan_loss, l1_loss
   
   if gen_loss_type == 'weighted_l1':
+    # normalizedmask is [-1, 0, 1] -> [forest, new_def, old_def]
+    # get mask
+    _, _, _, channels = input_image.shape
+    input_mask = input_image[:,:,:,-1]
+    input_img = input_image[:,:,:,:(channels - 1)]
+    input_mask = tf.repeat(tf.expand_dims(input_mask, axis = -1), (channels - 1), axis=-1)
+
     # loss term to look inside the mask of deforestation:
-    # get zero's from intput_image
-    input_mask = input_image == -2
-    mask = tf.cast(input_mask, tf.float32)
+    # get zero's from intput_mask
+    mask = input_mask == 0
+    mask = tf.cast(mask, tf.float32)
     masked_gen_output = gen_output*mask
-    masked_input = input_image*mask
+    masked_input = input_img*mask
     l1_loss_mask = tf.reduce_mean(tf.abs(masked_gen_output - masked_input)) 
 
     # loss term to look outside the mask (forest/old-deforest regions):
     # get non-zero's from input_image
-    input_nonmask = input_image > -2
-    out_mask = tf.cast(input_nonmask, tf.float32)
+    out_mask = input_mask != 0
+    out_mask = tf.cast(out_mask, tf.float32)
     out_masked_gen_output = gen_output*out_mask
-    out_masked_input = input_image*out_mask
+    out_masked_input = input_img*out_mask
     l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - out_masked_input)) 
 
-    l1_loss = l1_loss_mask + l1_loss_out
-    total_gen_loss = (GAN_WEIGHT * gan_loss) + (ALPHA * l1_loss_mask) + (BETA * l1_loss_out)
+    l1_loss = (ALPHA * l1_loss_mask) + (BETA * l1_loss_out)
+    total_gen_loss = (GAN_WEIGHT * gan_loss) + LAMBDA * l1_loss
     return total_gen_loss, gan_loss, l1_loss
 
 
@@ -447,6 +456,8 @@ def fit(train_ds, test_ds, config):
 
 
 if args.train:
+
+  checkpoint.restore(tf.train.latest_checkpoint(config['checkpoint_folder']))
   start = time.time()
   print(f'[*] Start training...')
   fit(train_ds, test_ds, config)

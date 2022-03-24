@@ -101,6 +101,7 @@ preprocessing_scaler = joblib.load(config['scaler_path'])
 final_pairs, _ = normalize_img_array(final_pairs, config['type_norm'], scaler=preprocessing_scaler)
 print('> Checking normalization:')
 print(np.unique(final_pairs))
+final_pairs_ref = final_pairs_ref - 1
 print(np.unique(final_pairs_ref))
 
 print('[*] Saving pairs...')
