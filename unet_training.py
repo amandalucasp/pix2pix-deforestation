@@ -67,20 +67,20 @@ print('[*] Loading patches...')
 # Training patches
 print('[*] Loading training patches.')
 patches_train, patches_tr_ref = load_patches(root_path, training_dir, augment_data=config['augment_data']) # retorna np.array(patches), np.array(patches_ref)
-print('> train:', np.unique(patches_train),  np.unique(patches_tr_ref))
+print('> Real data samples:', len(patches_train), np.min(patches_train), np.max(patches_train),  np.unique(patches_tr_ref))
 
 if config['synthetic_data_path'] != '':
-  synt_data_path = config['synthetic_data_path']
-  patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], '', from_pix2pix=True, pix2pix_max_samples=config['pix2pix_max_samples'])
-  print('> pix2pix:', np.min(patches_train_synt), np.max(patches_train_synt))
+  patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], folder='', from_pix2pix=True,
+                                                          pix2pix_max_samples=config['pix2pix_max_samples'],
+                                                          selected_synt_file=config['selected_synt_file'])
+  print('> Synthetic data samples:', len(patches_train_synt), np.min(patches_train_synt), np.max(patches_train_synt),  np.unique(patches_tr_synt_ref))
   patches_train = np.concatenate((patches_train, patches_train_synt))
   patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))
 
-print('>>patches_train:', np.unique(patches_train),  np.unique(patches_tr_ref))
 # Validation patches
 print('[*] Loading validation patches.')
 patches_val, patches_val_ref = load_patches(root_path, validation_dir, augment_data=config['augment_data'])
-print('> val:', np.unique(patches_val),  np.unique(patches_val_ref))
+print('> Val Samples:', len(patches_val), np.min(patches_val), np.max(patches_val),  np.unique(patches_val_ref))
 
 print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.shape))
 print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))

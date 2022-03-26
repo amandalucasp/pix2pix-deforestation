@@ -181,13 +181,20 @@ def compute_metrics(true_labels, predicted_labels):
   return accuracy, f1score, recall, precision
 
 
+def parse_file_to_list(file_path):
+  with open(file_path) as f:
+    file_list = f.read().splitlines()
+  file_list = [int(x) for x in file_list]
+  return file_list
+
+
 def data_augmentation(img, mask):
   image = np.rot90(img, 1)
   ref = np.rot90(mask, 1)
   return image, ref
 
 
-def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=1000, augment_data=False, number_class=3):
+def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=10000, augment_data=False, selected_synt_file=None):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
   img_files = os.listdir(imgs_dir)
@@ -195,9 +202,12 @@ def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=1000
   patches_ref = []
   selected_pos = np.arange(len(img_files))
 
-  if from_pix2pix and len(img_files) > pix2pix_max_samples:
-    print('[*]Loading input from pix2pix.', from_pix2pix)
-    selected_pos = np.random.choice(len(img_files), pix2pix_max_samples, replace=False)
+  if from_pix2pix:
+    print('[*] Loading input from pix2pix.')
+    if selected_synt_file:
+      selected_pos = parse_file_to_list(selected_synt_file)
+    if len(selected_pos) > pix2pix_max_samples:
+      selected_pos = np.random.choice(selected_pos, pix2pix_max_samples, replace=False)
     print('Some of the randomly chosen samples:', selected_pos[0:20])
 
   for i in selected_pos:
