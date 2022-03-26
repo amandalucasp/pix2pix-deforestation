@@ -62,7 +62,8 @@ fix_erratas: True
 
 # TRAINING PARAMETERS - UNET
 unet_data_path: ''
-synthetic_data_path: '' 
+synthetic_data_path: ''
+selected_synt_file: ''
 pix2pix_max_samples: 500
 training_output_path: '/unet-results/'
 input_channels: 20
