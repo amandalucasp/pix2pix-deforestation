@@ -29,6 +29,7 @@ tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_
 
 output_folder = unet_path + '/test/'
 os.makedirs(output_folder, exist_ok=True)
+shutil.copy('./config.yaml', output_folder)
 
 print('[*] Loading image array...')
 #image_array, final_mask, _ = get_dataset(config)
@@ -41,6 +42,7 @@ image_array, _ = normalize_img_array(image_array, config['type_norm'], scaler=pr
 # u-net expects input to be  [0, 1]. [-1, +1] => [0, 1]:
 image_array = image_array*0.5 + 0.5
 print('> image_array:', np.min(image_array), np.max(image_array))
+print('> final_mask:', np.unique(final_mask))
 
 mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5, 4))
 print('[*] Creating padded image...')
@@ -58,6 +60,8 @@ patch_size_cols = w//n_cols
 num_patches_x = int(h/patch_size_rows)
 num_patches_y = int(w/patch_size_cols)
 input_shape=(patch_size_rows,patch_size_cols, c)
+
+print('input_shape:', input_shape)
 
 time_ts = []
 for run in range(0, number_runs):
@@ -96,7 +100,9 @@ for run in range (0, number_runs):
     prob_rec[:,:,run] = np.load(output_folder+'/'+'prob_'+str(run)+'.npy').astype(np.float32)
 
 mean_prob = np.mean(prob_rec, axis = -1)
+#std_prob = np.std(prob_rec, axis = -1)
 np.save(output_folder + '/prob_mean.npy', mean_prob)
+#np.save(output_folder + '/prob_std.npy', std_prob)
 
 cmap = matplotlib.colors.ListedColormap(['black', 'gray', 'white'])
 # cmap = matplotlib.colors.ListedColormap(['black', 'gray', 'white'])

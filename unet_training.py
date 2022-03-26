@@ -19,7 +19,6 @@ from tensorflow.keras.optimizers import Adam
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import *
 
-from utils import *
 from utils_unet import * 
 
 seed = 0

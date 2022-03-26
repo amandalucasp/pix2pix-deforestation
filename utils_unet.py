@@ -220,6 +220,8 @@ def to_unet_format(img, mask):
   img = img*0.5 + 0.5
   # u-net expects a 1-channel mask
   # [-1, 0, +1] => [0, 1, 2]
+  if mask.ndim > 2:
+    mask = mask[:, :, -1]
   mask = mask + 1 
   return img, mask
 
