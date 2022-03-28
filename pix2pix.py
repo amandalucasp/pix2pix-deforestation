@@ -488,6 +488,7 @@ if args.train:
 
   counter = 0
   for inp, tar in pix2pix_input_ds:
+    filename = Path(tr_input_files[counter]).stem
     print(inp.shape, inp[0].shape) # ver de tirar esse [0]
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
     save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
@@ -501,6 +502,7 @@ if args.test:
   # Save output for test data
   counter = 0
   for inp, tar in test_ds:
+    filename = Path(tr_input_files[counter]).stem
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_test/' + str(counter) + '.png')
     save_synthetic_img(inp, prediction, synthetic_path, str(counter))
     counter+=1

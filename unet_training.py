@@ -70,9 +70,13 @@ patches_train, patches_tr_ref = load_patches(root_path, training_dir, augment_da
 print('> Real data samples:', len(patches_train), np.min(patches_train), np.max(patches_train),  np.unique(patches_tr_ref))
 
 if config['synthetic_data_path'] != '':
-  patches_train_synt, patches_tr_synt_ref = load_patches(config['synthetic_data_path'], folder='', from_pix2pix=True,
-                                                          pix2pix_max_samples=config['pix2pix_max_samples'],
-                                                          selected_synt_file=config['selected_synt_file'])
+  config['synthetic_masks_path'] = os.path.join(root_path, config['synthetic_masks_path'])
+  patches_train_synt, patches_tr_synt_ref = load_patches_synt(pix2pix_output_path=config['synthetic_data_path'], 
+                                                              pix2pix_input_path=config['synthetic_masks_path'], 
+                                                              pix2pix_max_samples=config['pix2pix_max_samples'], 
+                                                              augment_data=config['augment_data'], 
+                                                              selected_synt_file=config['selected_synt_file'], 
+                                                              combine_t2=config['combine_t2'])
   print('> Synthetic data samples:', len(patches_train_synt), np.min(patches_train_synt), np.max(patches_train_synt),  np.unique(patches_tr_synt_ref))
   patches_train = np.concatenate((patches_train, patches_train_synt))
   patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))

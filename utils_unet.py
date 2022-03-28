@@ -194,6 +194,80 @@ def data_augmentation(img, mask):
   return image, ref
 
 
+def plot_image(plot_list, columns, rows, title, filename=None, pad=1):
+  fig = plt.figure()
+  for i in range(0, columns*rows):
+    fig.add_subplot(rows, columns, i + 1)
+    plt.tick_params(left = False, right = False, labelleft = False, labelbottom = False, bottom = False)
+    plt.imshow(plot_list[i]  * 0.5 + 0.5)
+  fig.tight_layout(pad=pad)
+  if filename:
+    fig.savefig(filename)
+  plt.close(fig)
+
+
+def combine_fake_real_t2(real_t2, fake_t2, mask):
+  # copy real_t2 pixels to fake_t2
+  combined_t2 = np.zeros_like(real_t2)
+  deforestation_mask = mask == 0
+  combined_t2[deforestation_mask] = fake_t2[deforestation_mask]
+  combined_t2[~deforestation_mask] = real_t2[~deforestation_mask]
+  return combined_t2
+
+
+def transform_synthetic_input(pix2pix_output_image, pix2pix_input_pair):
+  # pix2pix_output_image: t1, t2 concatenated in axis 0
+  h, w, c = pix2pix_output_image.shape
+  t1 = pix2pix_output_image[:, :, :c//2]
+  fake_t2 = pix2pix_output_image[:, :, c//2:]
+  # pix2pix_input_pair: t1 // t2 // mask
+  h, w, c = pix2pix_input_pair.shape
+  w = w //3
+  real_t2 = pix2pix_input_pair[:, w:w*2,:]
+  mask = pix2pix_input_pair[:, w*2:,:]
+  combined_t2 = combine_fake_real_t2(real_t2, fake_t2, mask)
+  combined_img = np.concatenate((t1, combined_t2), axis=-1)
+  return combined_img
+
+
+def load_patches_synt(pix2pix_output_path, pix2pix_input_path, pix2pix_max_samples=10000, augment_data=False, selected_synt_file=None, combine_t2=False):
+  print('[*] Loading input from pix2pix.')
+  imgs_dir = pix2pix_output_path + '/imgs/' 
+  masks_dir = pix2pix_output_path + '/masks/'
+  pairs_dir = pix2pix_input_path + '/pairs/'
+  img_files = os.listdir(imgs_dir)
+  patches = []
+  patches_ref = []
+  selected_pos = np.arange(len(img_files))
+
+  if selected_synt_file:
+    selected_pos = parse_file_to_list(selected_synt_file)
+  if len(selected_pos) > pix2pix_max_samples:
+    selected_pos = np.random.choice(selected_pos, pix2pix_max_samples, replace=False)
+  print('Some of the randomly chosen samples:', selected_pos[0:20])
+
+  for i in selected_pos:
+    # get t1, fake t2, mask
+    img_path = imgs_dir + img_files[i]
+    mask_path = masks_dir + img_files[i] 
+    img = np.load(img_path) 
+    mask = np.load(mask_path)
+    if combine_t2:
+      # get real t2 to combine with fake t2
+      pairs_path = pairs_dir + img_files[i]
+      print('pairs_path:', pairs_path)
+      pair = np.load(pairs_path) # t1 // real t2 // mask
+      img = transform_synthetic_input(img, pair)
+
+    img, mask = to_unet_format(img, mask)
+    if augment_data and np.random.rand() > 0.5:
+      img, mask = data_augmentation(img, mask)
+    patches.append(img)
+    patches_ref.append(mask)
+  
+  return np.array(patches), np.squeeze(np.array(patches_ref))
+
+
 def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=10000, augment_data=False, selected_synt_file=None):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
@@ -201,14 +275,6 @@ def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=1000
   patches = []
   patches_ref = []
   selected_pos = np.arange(len(img_files))
-
-  if from_pix2pix:
-    print('[*] Loading input from pix2pix.')
-    if selected_synt_file:
-      selected_pos = parse_file_to_list(selected_synt_file)
-    if len(selected_pos) > pix2pix_max_samples:
-      selected_pos = np.random.choice(selected_pos, pix2pix_max_samples, replace=False)
-    print('Some of the randomly chosen samples:', selected_pos[0:20])
 
   for i in selected_pos:
     img_path = imgs_dir + img_files[i]

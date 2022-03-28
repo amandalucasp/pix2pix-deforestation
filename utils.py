@@ -232,12 +232,7 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
             # combined will be: T1 - T2 - mask
             combined = np.zeros(shape=(h,w*3,c//2)) 
             t1_image = patches_list[i][:,:,:c//2]
-
-            if not synthetic_input_pairs:
-                # if synthetic_input_pairs, T2 stays as zeros
-                t2_image = patches_list[i][:,:,c//2:]
-            else:
-                t2_image = np.zeros(shape=(h,w,c//2)) 
+            t2_image = patches_list[i][:,:,c//2:]
 
             # mask
             current_mask = np.expand_dims(patches_ref_list[i].copy(), axis=-1)
@@ -254,8 +249,7 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
             # salva imagens JPEG
             if config['debug_mode']:
                 combined[:,:w,:] = (t1_image + 1) * 127.5
-                if not synthetic_input_pairs:
-                    combined[:,w:w*2,:] = (t2_image + 1) * 127.5
+                combined[:,w:w*2,:] = (t2_image + 1) * 127.5
                 combined[:,w*2:,:] = current_mask * 127.55
                 if len(config['channels']) > 3:
                     combined = combined[:,:,config['debug_channels']]
