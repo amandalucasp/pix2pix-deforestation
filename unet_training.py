@@ -64,9 +64,14 @@ shutil.copy('./config.yaml', output_folder)
 
 print('[*] Loading patches...')
 
+if 'real_max_samples' in config.keys():
+  max_samples=config['real_max_samples']
+else:
+  max_samples=-1
+
 # Training patches
 print('[*] Loading training patches.')
-patches_train, patches_tr_ref = load_patches(root_path, training_dir, augment_data=config['augment_data']) # retorna np.array(patches), np.array(patches_ref)
+patches_train, patches_tr_ref = load_patches(root_path, training_dir, max_samples=max_samples, augment_data=config['augment_data']) # retorna np.array(patches), np.array(patches_ref)
 print('> Real data samples:', len(patches_train), np.min(patches_train), np.max(patches_train),  np.unique(patches_tr_ref))
 
 if config['synthetic_data_path'] != '':
@@ -78,6 +83,8 @@ if config['synthetic_data_path'] != '':
                                                               selected_synt_file=config['selected_synt_file'], 
                                                               combine_t2=config['combine_t2'])
   print('> Synthetic data samples:', len(patches_train_synt), np.min(patches_train_synt), np.max(patches_train_synt),  np.unique(patches_tr_synt_ref))
+  #patches_train_synt, patches_tr_synt_ref = discard_patches_by_percentage(patches_train_synt, patches_tr_synt_ref, config)
+  #print('> Synthetic data samples (after checking %):', len(patches_train_synt), np.min(patches_train_synt), np.max(patches_train_synt),  np.unique(patches_tr_synt_ref))
   patches_train = np.concatenate((patches_train, patches_train_synt))
   patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))
 

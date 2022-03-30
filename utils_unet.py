@@ -255,11 +255,11 @@ def load_patches_synt(pix2pix_output_path, pix2pix_input_path, pix2pix_max_sampl
     if combine_t2:
       # get real t2 to combine with fake t2
       pairs_path = pairs_dir + img_files[i]
-      print('pairs_path:', pairs_path)
       pair = np.load(pairs_path) # t1 // real t2 // mask
       img = transform_synthetic_input(img, pair)
 
     img, mask = to_unet_format(img, mask)
+
     if augment_data and np.random.rand() > 0.5:
       img, mask = data_augmentation(img, mask)
     patches.append(img)
@@ -268,13 +268,42 @@ def load_patches_synt(pix2pix_output_path, pix2pix_input_path, pix2pix_max_sampl
   return np.array(patches), np.squeeze(np.array(patches_ref))
 
 
-def load_patches(root_path, folder, from_pix2pix=False, pix2pix_max_samples=10000, augment_data=False, selected_synt_file=None):
+def discard_patches_by_percentage(patches, patches_ref, config, new_deforestation_pixel_value = 1):
+    # 0: forest, 1: new deforestation, 2: old deforestation
+    patch_size = config['patch_size']
+    percentage = 5
+    patches_ = []
+    patches_ref_ = []
+    rejected_patches_ = []
+    rejected_patches_ref = []
+    # rejected_pixels_count = []
+    for i in range(len(patches)):
+        patch = patches[i]
+        patch_ref = patches_ref[i]
+        class1 = patch_ref[patch_ref == new_deforestation_pixel_value]
+        per = int((patch_size ** 2) * (percentage / 100)) 
+        # print(len(class1), per)
+        if len(class1) >= per:
+            patches_.append(i)
+            patches_ref_.append(i)
+        else:
+            # print('descartado')
+            rejected_patches_.append(i)
+            rejected_patches_ref.append(i) 
+            # rejected_pixels_count.append(len(class1))
+    return patches[patches_], patches_ref[patches_ref_]
+
+
+def load_patches(root_path, folder, from_pix2pix=False, max_samples=-1, augment_data=False, selected_synt_file=None):
   imgs_dir = root_path + folder + '/imgs/'
   masks_dir = root_path + folder + '/masks/'
   img_files = os.listdir(imgs_dir)
   patches = []
   patches_ref = []
   selected_pos = np.arange(len(img_files))
+
+  if max_samples > 0:
+    selected_pos = np.random.choice(selected_pos, max_samples, replace=False)
 
   for i in selected_pos:
     img_path = imgs_dir + img_files[i]
