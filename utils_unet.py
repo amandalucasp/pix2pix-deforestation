@@ -303,7 +303,7 @@ def load_patches(root_path, folder, from_pix2pix=False, max_samples=-1, augment_
   selected_pos = np.arange(len(img_files))
 
   if max_samples > 0:
-    selected_pos = np.random.choice(selected_pos, max_samples, replace=False)
+    selected_pos = np.arange(max_samples)  #np.random.choice(selected_pos, max_samples, replace=False)
 
   for i in selected_pos:
     img_path = imgs_dir + img_files[i]
