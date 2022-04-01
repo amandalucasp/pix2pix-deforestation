@@ -92,7 +92,7 @@ if config['synthetic_data_path'] != '':
   #patches_train_synt, patches_tr_synt_ref = discard_patches_by_percentage(patches_train_synt, patches_tr_synt_ref, config)
   #print('> Synthetic data samples (after checking %):', len(patches_train_synt), np.min(patches_train_synt), np.max(patches_train_synt),  np.unique(patches_tr_synt_ref))
 
-  patches_train_synt, patches_tr_synt_ref, patches_val_synt, patches_val_synt_ref = train_test_split(patches_synt, patches_synt_ref, test_size=0.2, random_state=seed)
+  patches_train_synt, patches_val_synt, patches_tr_synt_ref, patches_val_synt_ref = train_test_split(patches_synt, patches_synt_ref, test_size=0.2, random_state=seed)
   # alternative code for spliting:
   #train_size = int(0.8 * len(patches_synt))
   #patches_train_synt = patches_synt[:train_size]
