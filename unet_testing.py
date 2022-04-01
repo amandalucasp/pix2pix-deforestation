@@ -133,7 +133,7 @@ ref1 [final_mask == 2] = 0
 TileMask = mask_amazon_ts * ref1
 GTTruePositives = final_mask==1
 
-Npoints = 10
+Npoints = 20
 Pmax = np.max(mean_prob[GTTruePositives * TileMask ==1])
 ProbList = np.linspace(Pmax,0,Npoints)
 
