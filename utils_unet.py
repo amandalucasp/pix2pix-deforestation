@@ -203,7 +203,7 @@ def plot_image(plot_list, columns, rows, title, filename=None, pad=1):
   fig.tight_layout(pad=pad)
   if filename:
     fig.savefig(filename)
-  plt.close(fig)
+  plt.close('all')
 
 
 def combine_fake_real_t2(real_t2, fake_t2, mask):
@@ -212,6 +212,19 @@ def combine_fake_real_t2(real_t2, fake_t2, mask):
   deforestation_mask = mask == 0
   combined_t2[deforestation_mask] = fake_t2[deforestation_mask]
   combined_t2[~deforestation_mask] = real_t2[~deforestation_mask]
+
+  '''
+  chans = [0, 1, 2]
+  fig = plt.figure(figsize=(10,8))
+  real_t2 = real_t2[:,:,chans] 
+  fake_t2 = fake_t2[:,:,chans]
+  mask = mask[:,:,chans]
+  #mask = mask * 0.5 + 0.5
+  combined_t2__ = combined_t2[:,:,chans]
+  plot_list = [real_t2, fake_t2, mask, combined_t2__]
+  os.makedirs('./combined_t2_samples/', exist_ok=True)
+  plot_image(plot_list, 4, 1, '', filename='./combined_t2_samples/' + str(i) + '.png', pad=1)
+  '''
   return combined_t2
 
 
@@ -303,7 +316,7 @@ def load_patches(root_path, folder, from_pix2pix=False, max_samples=-1, augment_
   selected_pos = np.arange(len(img_files))
 
   if max_samples > 0:
-    selected_pos = np.arange(max_samples)  #np.random.choice(selected_pos, max_samples, replace=False)
+    selected_pos = np.random.choice(selected_pos, max_samples, replace=False)
 
   for i in selected_pos:
     img_path = imgs_dir + img_files[i]

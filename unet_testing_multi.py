@@ -45,6 +45,9 @@ print('[*] Creating padded image...')
 n_pool = 3
 n_rows = 5
 n_cols = 4
+if not config['run_inference_on_cpu']:
+    n_rows = 6
+    n_cols = 7
 rows, cols = image_array.shape[:2]
 pad_rows = rows - np.ceil(rows/(n_rows*2**n_pool))*n_rows*2**n_pool
 pad_cols = cols - np.ceil(cols/(n_cols*2**n_pool))*n_cols*2**n_pool
@@ -141,7 +144,7 @@ for unet_path in unet_paths:
 
     mean_prob = mean_prob[:final_mask.shape[0], :final_mask.shape[1]]
 
-    Npoints = 10
+    Npoints = 20
     Pmax = np.max(mean_prob[GTTruePositives * TileMask ==1])
     ProbList = np.linspace(Pmax,0,Npoints)
 

@@ -72,6 +72,9 @@ log_dir= output_folder + "/logs/"
 out_dir = output_folder + "/output_images/"
  
 train_files = sorted(glob.glob(str(npy_path / 'training_data/pairs/*.npy')))
+val_files = sorted(glob.glob(str(npy_path / 'validation_data/pairs/*.npy')))
+train_files = train_files + val_files
+print('Files for training:', len(train_files))
 
 inp, re = load_npy_sample(train_files[0])
 input_shape = [inp.shape[0], inp.shape[1], config['output_channels'] + 1] # ex.: 128x128x10 + 1
