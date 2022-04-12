@@ -89,21 +89,8 @@ if config['synthetic_data_path'] != '':
                                                               selected_synt_file=config['selected_synt_file'], 
                                                               combine_t2=config['combine_t2'])
   print('> Synthetic data samples:', len(patches_synt), np.min(patches_synt), np.max(patches_synt),  np.unique(patches_synt_ref))
-  #patches_train_synt, patches_tr_synt_ref = discard_patches_by_percentage(patches_train_synt, patches_tr_synt_ref, config)
-  #print('> Synthetic data samples (after checking %):', len(patches_train_synt), np.min(patches_train_synt), np.max(patches_train_synt),  np.unique(patches_tr_synt_ref))
-
-  patches_train_synt, patches_val_synt, patches_tr_synt_ref, patches_val_synt_ref = train_test_split(patches_synt, patches_synt_ref, test_size=0.2, random_state=seed)
-  # alternative code for spliting:
-  #train_size = int(0.8 * len(patches_synt))
-  #patches_train_synt = patches_synt[:train_size]
-  #patches_tr_synt_ref = patches_synt_ref[:train_size]
-  #patches_val_synt = patches_synt[train_size:]
-  #patches_val_synt_ref = patches_synt_ref[train_size:]
-
-  patches_train = np.concatenate((patches_train, patches_train_synt))
-  patches_tr_ref = np.concatenate((patches_tr_ref, patches_tr_synt_ref))
-  patches_val = np.concatenate((patches_val, patches_val_synt))
-  patches_val_ref = np.concatenate((patches_val_ref, patches_val_synt_ref))
+  patches_train = np.concatenate((patches_train, patches_synt))
+  patches_tr_ref = np.concatenate((patches_tr_ref, patches_synt_ref))
 
 print("[*] Patches for Training:", str(patches_train.shape), str(patches_tr_ref.shape))
 print("[*] Patches for Validation:", str(patches_val.shape), str(patches_val_ref.shape))
