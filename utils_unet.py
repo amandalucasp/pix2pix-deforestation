@@ -281,6 +281,32 @@ def load_patches_synt(pix2pix_output_path, pix2pix_input_path, pix2pix_max_sampl
   return np.array(patches), np.squeeze(np.array(patches_ref))
 
 
+def discard_patches_by_max_percentage(patches, patches_ref, config, new_deforestation_pixel_value = 1):
+    # 0: forest, 1: new deforestation, 2: old deforestation
+    patch_size = config['patch_size']
+    percentage = 70
+    patches_ = []
+    patches_ref_ = []
+    rejected_patches_ = []
+    rejected_patches_ref = []
+    # rejected_pixels_count = []
+    for i in range(len(patches)):
+        patch = patches[i]
+        patch_ref = patches_ref[i]
+        class1 = patch_ref[patch_ref == new_deforestation_pixel_value]
+        per = int((patch_size ** 2) * (percentage / 100)) 
+        # print(len(class1), per)
+        if len(class1) <= per:
+            patches_.append(i)
+            patches_ref_.append(i)
+        else:
+            # print('descartado')
+            rejected_patches_.append(i)
+            rejected_patches_ref.append(i) 
+            # rejected_pixels_count.append(len(class1))
+    return patches[patches_], patches_ref[patches_ref_]
+
+
 def discard_patches_by_percentage(patches, patches_ref, config, new_deforestation_pixel_value = 1):
     # 0: forest, 1: new deforestation, 2: old deforestation
     patch_size = config['patch_size']

@@ -89,6 +89,9 @@ if config['synthetic_data_path'] != '':
                                                               selected_synt_file=config['selected_synt_file'], 
                                                               combine_t2=config['combine_t2'])
   print('> Synthetic data samples:', len(patches_synt), np.min(patches_synt), np.max(patches_synt),  np.unique(patches_synt_ref))
+  patches_synt, patches_synt_ref = discard_patches_by_max_percentage(patches_synt, patches_synt_ref, config)
+  print('> Synthetic data samples (after checking MAX %):', len(patches_synt))
+
   patches_train = np.concatenate((patches_train, patches_synt))
   patches_tr_ref = np.concatenate((patches_tr_ref, patches_synt_ref))
 
