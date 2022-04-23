@@ -203,6 +203,25 @@ def calculate_percentage_of_class(img_mask):
     return per_class_1*100
 
 
+def histeq(im,nbr_bins=3):
+   #get image histogram
+   imhist,bins = np.histogram(im.flatten(),nbr_bins,normed=True)
+   cdf = imhist.cumsum() #cumulative distribution function
+   cdf = 255 * cdf / cdf[-1] #normalize
+   #use linear interpolation of cdf to find new pixel values
+   im2 = np.interp(im.flatten(),bins[:-1],cdf)
+   return im2.reshape(im.shape), cdf
+
+
+def combine_fake_real_t2(real_t2, fake_t2, mask):
+  # copy real_t2 pixels to fake_t2
+  combined_t2 = np.zeros_like(real_t2)
+  deforestation_mask = mask == 0
+  combined_t2[deforestation_mask] = fake_t2[deforestation_mask]
+  combined_t2[~deforestation_mask] = real_t2[~deforestation_mask]
+  return combined_t2
+
+
 def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthetic_input_pairs=False):
     os.makedirs(pairs_path + '/pairs', exist_ok=True)
     counter = 0
@@ -220,19 +239,18 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
 
         t1_img = patches_list[i][:,:,:c//2] 
         t2_img = patches_list[i][:,:,c//2:]
-        mask = patches_ref_list[i]
+        mask = patches_ref_list[i] # 0, 1, 2
 
-        # inverting mask
-        current_mask = (np.logical_not(mask.copy()))*1
+        # discretizing deforestation region
+        
+
         # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
         if mask.shape[-1] != c//2:
             current_mask = np.repeat(np.expand_dims(current_mask, axis = -1), c//2, axis=-1)
-        # apply mask to T2 
-        masked_t2 = t2_img * current_mask
 
         combined[:,:w,:] = t1_img 
         combined[:,w:w*2,:] = t2_img
-        combined[:,w*2:w*3,:] = current_mask
+        combined[:,w*2:w*3,:] = mask
         combined[:,w*3:,:] = masked_t2
         np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
 
@@ -248,7 +266,7 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
         counter += 1
 
 
-def get_dataset(config):
+def get_dataset(config, full_image=False, do_filter_outliers=True):
     """
     input: config - a dict file with processing parameters
     output: image_stack, final_mask
@@ -280,31 +298,33 @@ def get_dataset(config):
     sent2_2019 = np.concatenate((sent2_2019_1, sent2_2019_2), axis=-1)
     del sent2_2019_1, sent2_2019_2
     
-    print('Filtering outliers...')
     sent2_2019 = sent2_2019[:, :, config['channels']]
-    image_stack = filter_outliers(sent2_2019.copy())
+    if do_filter_outliers:
+        print('Filtering outliers - 2019')
+        sent2_2019 = filter_outliers(sent2_2019.copy())
+    image_stack = sent2_2019
     del sent2_2019
 
     if config['change_detection']:
-        sent2_2018 = sent2_2018[:, :, config['channels']]  
-        sent2_2018 = filter_outliers(sent2_2018.copy()) 
+        sent2_2018 = sent2_2018[:, :, config['channels']] 
+        if do_filter_outliers: 
+            print('Filtering outliers - 2018')
+            sent2_2018 = filter_outliers(sent2_2018.copy()) 
         image_stack = np.concatenate((sent2_2018, image_stack), axis=-1)
-        del sent2_2018 
+        del sent2_2018
 
     print('Loading reference...')
-    final_mask = load_tif_image(config['root_path'] + 'ref/r10m_def_2019.tif').astype('int')
-    # Transpose reference
-    final_mask = np.transpose(final_mask.copy(), (1, 0))
-    # Apply limits
-    final_mask = final_mask[:config['lim_x'], :config['lim_y']]
+    final_mask = np.load(config['root_path']+'ref/final_mask_label.npy').astype('float32')
+    # 0: forest, 1: new deforestation, 2: old deforestation
+    
+    if not full_image:
+        final_mask = final_mask[:config['lim_x'], :config['lim_y']]
+        image_stack = image_stack[:config['lim_x'], :config['lim_y'], :]
 
-    accumulated_mask = np.load(config['root_path'] + 'ref/final_mask_label.npy').astype('float32')
-    accumulated_mask = accumulated_mask[:config['lim_x'], :config['lim_y']]
-
-    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
+    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1])
     print('image_stack size: ', image_stack.shape)
 
-    return image_stack, final_mask, accumulated_mask
+    return image_stack, final_mask
 
 
 def check_patch_class(patch):
@@ -328,7 +348,7 @@ def write_patches_to_disk(patches, patches_ref, patches_ref_acc, out_path):
         counter += 1
 
 
-def discard_patches_by_percentage(patches, patches_ref, patches_ref_acc, config, new_deforestation_pixel_value = 1):
+def discard_patches_by_percentage(patches, patches_ref, config, new_deforestation_pixel_value = 1):
     # 0: forest, 1: new deforestation, 2: old deforestation
     patch_size = config['patch_size']
     percentage = config['min_percentage']
@@ -342,7 +362,7 @@ def discard_patches_by_percentage(patches, patches_ref, patches_ref_acc, config,
             patches_selected.append(i)
         else:
             rejected_patches.append(i)
-    return patches[patches_selected], patches_ref[patches_selected], patches_ref_acc[patches_selected], patches[rejected_patches], patches_ref[rejected_patches], patches_ref_acc[rejected_patches]
+    return patches[patches_selected], patches_ref[patches_selected], patches[rejected_patches], patches_ref[rejected_patches]
 
 
 def retrieve_idx_percentage(reference, patches_idx_set, patch_size, pertentage = 5):
@@ -411,14 +431,13 @@ def extract_patches(input_image, reference, patch_size, stride):
     return patches_array, patches_ref
 
 
-def patch_tiles(tiles, mask_amazon, image_array, image_ref, accumulated_deforestation_mask, stride, config, save_rejected=False):
+def patch_tiles(tiles, mask_amazon, image_array, image_ref, stride, config, save_rejected=False):
     '''Extraction of image patches and labels '''
     patch_size = config['patch_size']
     rej_out_path = config['output_path'] + '/rejected_patches_npy/'
     os.makedirs(rej_out_path, exist_ok=True)
     patches_out = []
     patches_ref_2019 = []
-    patches_ref_acc = []
     counter = 0
     for num_tile in tiles:
         print(num_tile)
@@ -431,22 +450,17 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, accumulated_deforest
         tile_img = image_array[x1:x2 + 1, y1:y2 + 1, :]
         tile_ref = image_ref[x1:x2 + 1, y1:y2 + 1]
         patches_img, patch_ref = extract_patches(tile_img, tile_ref, patch_size, stride)
-        tile_ref_acc = accumulated_deforestation_mask[x1:x2 + 1, y1:y2 + 1]
-        _, patch_ref_acc = extract_patches(tile_img, tile_ref_acc, patch_size, stride)
-        # descarta por %
-        patches_img, patch_ref, patch_ref_acc, rej_patches, rej_patches_ref, rej_patches_ref_accumulated = discard_patches_by_percentage(patches_img, patch_ref, patch_ref_acc, config)
+        patches_img, patch_ref, rej_patches, rej_patches_ref = discard_patches_by_percentage(patches_img, patch_ref, config)
         # salva os patches rejeitados
         if save_rejected:
             np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_img.npy', rej_patches) 
             np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref.npy', rej_patches_ref)
-            np.save(rej_out_path + 'rej_patches_tile_' + str(num_tile) + '_ref_accumulated.npy', rej_patches_ref_accumulated)
         patches_out.append(patches_img)
         patches_ref_2019.append(patch_ref)
-        patches_ref_acc.append(patch_ref_acc)
     patches_out = np.concatenate(patches_out)
     patches_ref_2019 = np.concatenate(patches_ref_2019)
     patches_ref_acc = np.concatenate(patches_ref_acc)
-    return patches_out, patches_ref_2019, patches_ref_acc
+    return patches_out, patches_ref_2019
 
 
 def save_npy_array(np_array, out_path):

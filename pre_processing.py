@@ -23,12 +23,13 @@ print(config)
 os.makedirs(config['output_path'], exist_ok=True)
 shutil.copy('./config.yaml', config['output_path'])
 
-image_array, final_mask, accumulated_deforestation_mask = get_dataset(config)
+image_array, final_mask = get_dataset(config)
 
 # Print percentage of each class (whole image)
-print('Total old/no deforestaion class is {}'.format(len(final_mask[final_mask==0])))
-print('Total new deforestaion class is {}'.format(len(final_mask[final_mask==1])))
-print('Percentage of deforestaion class is {:.2f}'.format((len(final_mask[final_mask==1])*100)/len(final_mask[final_mask==0])))
+print('Total NO deforestation class is {}'.format(len(final_mask[final_mask==0])))
+print('Total NEW deforestation class is {}'.format(len(final_mask[final_mask==1])))
+print('Total OLD deforestation class is {}'.format(len(final_mask[final_mask==2])))
+print('Percentage of new deforestaion class is {:.2f}'.format((len(final_mask[final_mask==1])*100)/len(final_mask[final_mask==0])))
 
 ################### EXTRACT TILES
 
@@ -44,35 +45,12 @@ image_array = image_array[:mask_tiles.shape[0], :mask_tiles.shape[1],:]
 final_mask = final_mask[:mask_tiles.shape[0], :mask_tiles.shape[1]]
 
 
-if config['save_tiles']:
-    print("[*] SAVING TEST TILES")
-    os.makedirs(tst_out_path + '/tiles_ts', exist_ok=True)
-    for num_tile in tiles_ts:
-        rows, cols = np.where(mask_tiles == num_tile)
-        x1 = np.min(rows)
-        y1 = np.min(cols)
-        x2 = np.max(rows)
-        y2 = np.max(cols)
-        tile_img = image_array[x1:x2 + 1, y1:y2 + 1, :]
-        tile_ref = final_mask[x1:x2 + 1, y1:y2 + 1]
-        tile_ref_acc = accumulated_deforestation_mask[x1:x2 + 1, y1:y2 + 1]
-        np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.npy', tile_img)
-        np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_ref.npy', tile_ref)
-        np.save(tst_out_path + '/tiles_ts/' + str(num_tile) + '_ref_acc.npy', tile_ref_acc)
-        if config['change_detection']:
-            h, w, c = tile_img.shape
-            if c > 3:
-                chans = [0, 1, 3, 10, 11, 13]
-                tile_img = tile_img[:,:,chans]
-        cv2.imwrite(tst_out_path + '/tiles_ts/' + str(num_tile) + '_img.jpeg', tile_img)
-
-
 ################### EXTRACT PATCHES
 
 print("[*] EXTRACTING PATCHES")
 
 print('Extracting training patches')
-patches_trn, patches_trn_ref, patches_trn_ref_acc = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config, save_rejected=True)
+patches_trn, patches_trn_ref = patch_tiles(config['tiles_tr'], mask_tiles, image_array, final_mask, stride, config, save_rejected=True)
 if not config['load_scaler']:
     patches_trn, train_scaler = normalize_img_array(patches_trn, config['type_norm'])
     joblib.dump(train_scaler, config['output_path'] + '/minmax_scaler.bin', compress=True)
@@ -82,10 +60,10 @@ else:
     patches_trn, _ = normalize_img_array(patches_trn, config['type_norm'], scaler=train_scaler)
 
 print('Extracting validation patches')
-patches_val, patches_val_ref, patches_val_ref_acc = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config)
+patches_val, patches_val_ref = patch_tiles(config['tiles_val'], mask_tiles, image_array, final_mask, stride, config)
 patches_val, _ = normalize_img_array(patches_val, config['type_norm'], scaler=train_scaler)
 print('Extracting test patches')
-patches_tst, patches_tst_ref, patches_tst_ref_acc = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, accumulated_deforestation_mask, stride, config)
+patches_tst, patches_tst_ref = patch_tiles(tiles_ts, mask_tiles, image_array, final_mask, stride, config)
 patches_tst, _ = normalize_img_array(patches_tst, config['type_norm'], scaler=train_scaler)
 del image_array, final_mask
 
@@ -95,7 +73,6 @@ print(np.min(patches_val), np.max(patches_val))
 print(np.min(patches_tst), np.max(patches_tst))
 
 print('Ref values:', np.unique(patches_trn_ref), np.unique(patches_val_ref), np.unique(patches_tst_ref))
-print('Ref Acc values:', np.unique(patches_trn_ref_acc), np.unique(patches_val_ref_acc), np.unique(patches_tst_ref_acc))
 
 print('Scaler params:')
 print(train_scaler.min_)
@@ -120,11 +97,11 @@ if config['save_patches']:
     os.makedirs(tst_out_path + '/masks_acc', exist_ok=True)
     print("[*] SAVING PATCHES")
     print('Saving training patches...')
-    write_patches_to_disk(patches_trn, patches_trn_ref, patches_trn_ref_acc, trn_out_path)
+    write_patches_to_disk(patches_trn, patches_trn_ref, trn_out_path)
     print('Saving validation patches...')
-    write_patches_to_disk(patches_val, patches_val_ref, patches_val_ref_acc, val_out_path)
+    write_patches_to_disk(patches_val, patches_val_ref, val_out_path)
     print('Saving testing patches...')
-    write_patches_to_disk(patches_tst, patches_tst_ref, patches_tst_ref_acc, tst_out_path)
+    write_patches_to_disk(patches_tst, patches_tst_ref, tst_out_path)
 
 ################### COMBINE PATCHES INTO INPUT FORMAT FOR PIX2PIX
 
