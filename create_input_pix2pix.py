@@ -78,7 +78,7 @@ for year in years:
         # Creating just to be able to use code
         patch_ref_acc = np.zeros_like(patch_ref)
         # Discard by % 
-        _, patch_ref, _, _, _ = discard_patches_by_percentage(patches_img, patch_ref, patch_ref_acc, config)
+        _, patch_ref, _, _, _, _ = discard_patches_by_percentage(patches_img, patch_ref, patch_ref_acc, config)
         # Append to list
         patches_ref.append(patch_ref)
 

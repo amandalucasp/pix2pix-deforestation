@@ -53,6 +53,8 @@ OUTPUT_CHANNELS = config['output_channels']
 # Generator Loss Term
 ALPHA = config['alpha']
 BETA = config['beta']
+ALPHA = ALPHA / (ALPHA + BETA)
+BETA = 1.0 - ALPHA
 LAMBDA = config['lambda']
 GAN_WEIGHT = config['gan_weight']
 ngf = config['ngf']
@@ -70,6 +72,9 @@ log_dir= output_folder + "/logs/"
 out_dir = output_folder + "/output_images/"
  
 train_files = sorted(glob.glob(str(npy_path / 'training_data/pairs/*.npy')))
+val_files = sorted(glob.glob(str(npy_path / 'validation_data/pairs/*.npy')))
+train_files = train_files + val_files
+print('Files for training:', len(train_files))
 
 inp, re = load_npy(train_files[0])
 input_shape = [inp.shape[0], inp.shape[1], config['output_channels']] # 128x128x10 masked_t2
@@ -355,24 +360,31 @@ def generator_loss(disc_generated_output, gen_output, target, input_image, gen_l
     return total_gen_loss, gan_loss, l1_loss
   
   if gen_loss_type == 'weighted_l1':
+    # normalizedmask is [-1, 0, 1] -> [forest, new_def, old_def]
+    # get mask
+    _, _, _, channels = input_image.shape
+    input_mask = input_image[:,:,:,-1]
+    input_img = input_image[:,:,:,:(channels - 1)]
+    input_mask = tf.repeat(tf.expand_dims(input_mask, axis = -1), (channels - 1), axis=-1)
+
     # loss term to look inside the mask of deforestation:
-    # get zero's from intput_image
-    input_mask = input_image == -2
-    mask = tf.cast(input_mask, tf.float32)
+    # get zero's from intput_mask
+    mask = input_mask == 0
+    mask = tf.cast(mask, tf.float32)
     masked_gen_output = gen_output*mask
-    masked_input = input_image*mask
+    masked_input = input_img*mask
     l1_loss_mask = tf.reduce_mean(tf.abs(masked_gen_output - masked_input)) 
 
     # loss term to look outside the mask (forest/old-deforest regions):
     # get non-zero's from input_image
-    input_nonmask = input_image > -2
-    out_mask = tf.cast(input_nonmask, tf.float32)
+    out_mask = input_mask != 0
+    out_mask = tf.cast(out_mask, tf.float32)
     out_masked_gen_output = gen_output*out_mask
-    out_masked_input = input_image*out_mask
+    out_masked_input = input_img*out_mask
     l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - out_masked_input)) 
 
-    l1_loss = l1_loss_mask + l1_loss_out
-    total_gen_loss = (GAN_WEIGHT * gan_loss) + (ALPHA * l1_loss_mask) + (BETA * l1_loss_out)
+    l1_loss = (ALPHA * l1_loss_mask) + (BETA * l1_loss_out)
+    total_gen_loss = (GAN_WEIGHT * gan_loss) + LAMBDA * l1_loss
     return total_gen_loss, gan_loss, l1_loss
 
 
@@ -447,11 +459,13 @@ def fit(train_ds, test_ds, config):
 
 
 if args.train:
+  if config['checkpoint_folder'] != '':
+    checkpoint.restore(tf.train.latest_checkpoint(config['checkpoint_folder']))
   start = time.time()
   print(f'[*] Start training...')
   fit(train_ds, test_ds, config)
   print(f'[*] Time taken for training: {time.time()-start:.2f} sec\n')
-
+  
   os.makedirs(output_folder + '/generated_plots_test/')
   synthetic_path = output_folder + '/synthetic_data_test/'
 
@@ -477,6 +491,7 @@ if args.train:
 
   counter = 0
   for inp, tar in pix2pix_input_ds:
+    filename = Path(tr_input_files[counter]).stem
     print(inp.shape, inp[0].shape) # ver de tirar esse [0]
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_random/' + str(counter) + '.png')
     save_synthetic_img(inp[0], prediction, synthetic_path, str(counter))
@@ -490,6 +505,7 @@ if args.test:
   # Save output for test data
   counter = 0
   for inp, tar in test_ds:
+    filename = Path(tr_input_files[counter]).stem
     prediction = generate_images(generator, inp, tar, output_folder + '/generated_plots_test/' + str(counter) + '.png')
     save_synthetic_img(inp, prediction, synthetic_path, str(counter))
     counter+=1
