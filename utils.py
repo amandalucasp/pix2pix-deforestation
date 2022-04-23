@@ -246,7 +246,7 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
             combined[:,:w,:] = (t1_img + 1) * 127.5
             combined[:,w:w*2,:] = (t2_img + 1) * 127.5
             combined[:,w*2:w*3,:] = current_mask * 127.5
-            combined[:,w*3:,:] = (masked_t2 + 1) * 127.5 * current_mask
+            combined[:,w*3:,:] = (masked_t2 + 1) * 127.5 * current_mask_inverted
             if len(config['channels']) > 3:
                 combined = combined[:,:,config['debug_channels']]
             cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
