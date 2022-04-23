@@ -222,13 +222,18 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
         t2_img = patches_list[i][:,:,c//2:]
         mask = patches_ref_list[i]
 
-        # inverting mask
-        current_mask = (np.logical_not(mask.copy()))*1
         # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
+        current_mask = mask.copy()
         if mask.shape[-1] != c//2:
             current_mask = np.repeat(np.expand_dims(current_mask, axis = -1), c//2, axis=-1)
+
+        # inverting mask
+        current_mask_inverted = (np.logical_not(mask.copy()))*1
+        # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
+        if current_mask_inverted.shape[-1] != c//2:
+            current_mask_inverted = np.repeat(np.expand_dims(current_mask_inverted, axis = -1), c//2, axis=-1)
         # apply mask to T2 
-        masked_t2 = t2_img * current_mask
+        masked_t2 = t2_img * current_mask_inverted
 
         combined[:,:w,:] = t1_img 
         combined[:,w:w*2,:] = t2_img
