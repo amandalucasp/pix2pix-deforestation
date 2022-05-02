@@ -30,8 +30,8 @@ def draw_mask_contour(test_mask, real_t2):
   mask = mask.astype(np.uint8)
   # draw contours
   contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-  contour = max(contours, key = cv2.contourArea)
-  real_t2 = cv2.drawContours(real_t2, contour, -1, (0,255,0), 1)
+  for contour in contours:
+    real_t2 = cv2.drawContours(real_t2, contour, -1, (0,255,0), 1)
   return real_t2
 
 
