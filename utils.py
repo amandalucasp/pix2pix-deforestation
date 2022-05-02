@@ -24,7 +24,7 @@ def load_npy_file(img_file):
     elapsed = time.time() - start
     print(os.path.basename(img_file), elapsed)
     start = time.time()
-    ref_file = img_file.replace('_img', '_ref_accumulated')
+    ref_file = img_file.replace('_img', '_ref')
     npy_ref = np.load(ref_file)
     elapsed = time.time() - start
     print(os.path.basename(ref_file), elapsed)
@@ -41,7 +41,7 @@ def load_npy_files(files_list):
         elapsed = time.time() - start
         print(os.path.basename(img_file), elapsed)
         start = time.time()
-        ref_file = img_file.replace('_img', '_ref_accumulated')
+        ref_file = img_file.replace('_img', '_ref')
         npys_refs.append(np.load(ref_file))
         elapsed = time.time() - start
         print(os.path.basename(ref_file), elapsed)
@@ -234,32 +234,28 @@ def save_image_pairs(patches_list, patches_ref_list, pairs_path, config, synthet
 
     for i in range(patches_list.shape[0]):
         
-        # combined will be: T1 - T2 - mask - masked T2 
-        combined = np.zeros(shape=(h,w*4,c//2))
+        # combined will be: T1 - T2 - mask 
+        combined = np.zeros(shape=(h,w*3,c//2))
 
         t1_img = patches_list[i][:,:,:c//2] 
         t2_img = patches_list[i][:,:,c//2:]
         mask = patches_ref_list[i] # 0, 1, 2
 
-        # discretizing deforestation region
-        
-
+        current_mask = mask.copy()
         # replicando os canais da mascara ate atingir o numero de canais de t1 e t2 
         if mask.shape[-1] != c//2:
             current_mask = np.repeat(np.expand_dims(current_mask, axis = -1), c//2, axis=-1)
 
         combined[:,:w,:] = t1_img 
         combined[:,w:w*2,:] = t2_img
-        combined[:,w*2:w*3,:] = mask
-        combined[:,w*3:,:] = masked_t2
+        combined[:,w*2:,:] = current_mask
         np.save(pairs_path + '/pairs/' + str(i) + '.npy', combined)
 
         # salva imagens JPEG
         if config['debug_mode']:
             combined[:,:w,:] = (t1_img + 1) * 127.5
             combined[:,w:w*2,:] = (t2_img + 1) * 127.5
-            combined[:,w*2:w*3,:] = current_mask * 127.5
-            combined[:,w*3:,:] = (masked_t2 + 1) * 127.5 * current_mask
+            combined[:,w*2:,:] = current_mask * 127.5
             if len(config['channels']) > 3:
                 combined = combined[:,:,config['debug_channels']]
             cv2.imwrite(pairs_path + '/pairs/' + str(i) + '_debug.jpg', combined)
@@ -321,7 +317,7 @@ def get_dataset(config, full_image=False, do_filter_outliers=True):
         final_mask = final_mask[:config['lim_x'], :config['lim_y']]
         image_stack = image_stack[:config['lim_x'], :config['lim_y'], :]
 
-    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1])
+    print('final_mask unique values:', np.unique(final_mask), len(final_mask[final_mask == 1]))
     print('image_stack size: ', image_stack.shape)
 
     return image_stack, final_mask
@@ -339,12 +335,11 @@ def check_patch_class(patch):
         return None
 
 
-def write_patches_to_disk(patches, patches_ref, patches_ref_acc, out_path):
+def write_patches_to_disk(patches, patches_ref, out_path):
     counter = 0
     for i in range(patches.shape[0]):
         np.save(out_path + '/imgs/' + str(i) + '.npy', patches[i])
         np.save(out_path + '/masks/' + str(i) + '.npy', patches_ref[i])
-        np.save(out_path + '/masks_acc/' + str(i) + '.npy', patches_ref_acc[i])
         counter += 1
 
 
@@ -459,7 +454,6 @@ def patch_tiles(tiles, mask_amazon, image_array, image_ref, stride, config, save
         patches_ref_2019.append(patch_ref)
     patches_out = np.concatenate(patches_out)
     patches_ref_2019 = np.concatenate(patches_ref_2019)
-    patches_ref_acc = np.concatenate(patches_ref_acc)
     return patches_out, patches_ref_2019
 
 

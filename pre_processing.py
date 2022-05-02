@@ -17,8 +17,6 @@ config = yaml.load(stream, Loader=yaml.CLoader)
 stride = int((1 - config['overlap']) * config['patch_size'])
 tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val']))) # [7,8] 
 
-config['output_path'] = config['output_path'] + '/change_detection_' + str(config['change_detection']).lower() 
-
 print(config)
 os.makedirs(config['output_path'], exist_ok=True)
 shutil.copy('./config.yaml', config['output_path'])
@@ -88,13 +86,10 @@ print('[*] Testing patches:', patches_tst.shape)
 if config['save_patches']:
     os.makedirs(trn_out_path + '/imgs', exist_ok=True)
     os.makedirs(trn_out_path + '/masks', exist_ok=True)
-    os.makedirs(trn_out_path + '/masks_acc', exist_ok=True)
     os.makedirs(val_out_path + '/imgs', exist_ok=True)
     os.makedirs(val_out_path + '/masks', exist_ok=True)
-    os.makedirs(val_out_path + '/masks_acc', exist_ok=True)
     os.makedirs(tst_out_path + '/imgs', exist_ok=True)
     os.makedirs(tst_out_path + '/masks', exist_ok=True)
-    os.makedirs(tst_out_path + '/masks_acc', exist_ok=True)
     print("[*] SAVING PATCHES")
     print('Saving training patches...')
     write_patches_to_disk(patches_trn, patches_trn_ref, trn_out_path)

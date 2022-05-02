@@ -70,9 +70,13 @@ log_dir= output_folder + "/logs/"
 out_dir = output_folder + "/output_images/"
  
 train_files = sorted(glob.glob(str(npy_path / 'training_data/pairs/*.npy')))
+val_files = sorted(glob.glob(str(npy_path / 'validation_data/pairs/*.npy')))
+train_files = train_files + val_files
+print('Files for training:', len(train_files))
 
 inp, re = load_npy(train_files[0])
-input_shape = [inp.shape[0], inp.shape[1], config['output_channels']] # 128x128x10 masked_t2
+input_shape = inp.shape # [[0], inp.shape[1], config['output_channels']]
+nets_input_shape = [inp.shape[0], inp.shape[1], config['output_channels']]
 target_shape = re.shape # 128x128x10 
 print('input_shape:', input_shape, np.min(inp), np.max(inp))
 print('target_shape:', target_shape, np.min(re), np.max(re))
@@ -233,9 +237,9 @@ def Generator(input_shape=[256, 256, 3], ngf=64, residual=False, n_residuals=3, 
 
 
 if config['fix_erratas']:
-  generator = Generator_128(input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
+  generator = Generator_128(nets_input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
 else:
-  generator = Generator(input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
+  generator = Generator(nets_input_shape, ngf, config['residual_generator'], config['number_residuals'], config['drop_blocs'])
 
 print(generator.summary())
 gen_output = generator(inp[tf.newaxis, ...], training=False)
@@ -311,10 +315,13 @@ def Discriminator(input_shape=[256, 256, 3], target_shape=[256, 256, 3], ndf=64)
 
 
 if config['fix_erratas']:
-  discriminator = Discriminator_128(input_shape, target_shape, ndf)
+  discriminator = Discriminator_128(nets_input_shape, target_shape, ndf)
 else:
-  discriminator = Discriminator(input_shape, target_shape, ndf)
-disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
+  discriminator = Discriminator(nets_input_shape, target_shape, ndf)
+
+_, _,  channels = inp.shape
+inp_ = inp[:,:,:channels//2]
+disc_out = discriminator([inp_[tf.newaxis, ...], gen_output], training=False)
 
 fig = plt.figure()
 print(disc_out.shape, np.min(disc_out), np.max(disc_out))
@@ -335,13 +342,15 @@ checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
 for example_input, example_target in test_ds.take(1):
   generate_images(generator, example_input, example_target, output_folder + '/sample.png')
 
+# ate aqui ok
+
 os.makedirs(out_dir, exist_ok=True)
 summary_writer = tf.summary.create_file_writer(
   log_dir + "fit/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
 
 loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
-def generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type='default'):
+def generator_loss(disc_generated_output, gen_output, target, input_image, input_mask, gen_loss_type='default'):
   # input_image: masked_t2
   # target: real_t2
   # gen_output: fake_t2
@@ -355,24 +364,22 @@ def generator_loss(disc_generated_output, gen_output, target, input_image, gen_l
     return total_gen_loss, gan_loss, l1_loss
   
   if gen_loss_type == 'weighted_l1':
-    # loss term to look inside the mask of deforestation:
-    # get zero's from intput_image
-    input_mask = input_image == -2
-    mask = tf.cast(input_mask, tf.float32)
+    # loss term to look inside the mask of new deforestation:
+    mask = input_mask == 0 # new deforestation pixel value
+    mask = tf.cast(mask, tf.float32)
     masked_gen_output = gen_output*mask
     masked_input = input_image*mask
     l1_loss_mask = tf.reduce_mean(tf.abs(masked_gen_output - masked_input)) 
 
     # loss term to look outside the mask (forest/old-deforest regions):
-    # get non-zero's from input_image
-    input_nonmask = input_image > -2
-    out_mask = tf.cast(input_nonmask, tf.float32)
+    out_mask = input_mask != 0
+    out_mask = tf.cast(out_mask, tf.float32)
     out_masked_gen_output = gen_output*out_mask
     out_masked_input = input_image*out_mask
     l1_loss_out = tf.reduce_mean(tf.abs(out_masked_gen_output - out_masked_input)) 
 
-    l1_loss = l1_loss_mask + l1_loss_out
-    total_gen_loss = (GAN_WEIGHT * gan_loss) + (ALPHA * l1_loss_mask) + (BETA * l1_loss_out)
+    l1_loss = (ALPHA * l1_loss_mask) + (BETA * l1_loss_out)
+    total_gen_loss = (GAN_WEIGHT * gan_loss) + LAMBDA * l1_loss
     return total_gen_loss, gan_loss, l1_loss
 
 
@@ -387,12 +394,16 @@ def discriminator_loss(disc_real_output, disc_generated_output):
 @tf.function
 def train_step(input_image, target, step, config, gen_loss_type='default'):
   with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-    gen_output = generator(input_image, training=True) 
+    
+    _, _, _, channels = input_image.shape
+    input_mask = input_image[:,:,:,channels//2:]
+    input_img = input_image[:,:,:,:channels//2]
 
-    disc_real_output = discriminator([input_image, target], training=True)
-    disc_generated_output = discriminator([input_image, gen_output], training=True)
+    gen_output = generator(input_img, training=True) 
+    disc_real_output = discriminator([input_img, target], training=True)
+    disc_generated_output = discriminator([input_img, gen_output], training=True)
 
-    gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(disc_generated_output, gen_output, target, input_image, gen_loss_type)
+    gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(disc_generated_output, gen_output, target, input_img, input_mask, gen_loss_type)
     disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
     if config['slow_discriminator'] == True:
       disc_loss = 0.5 * disc_loss
