@@ -1,25 +1,25 @@
 # PRE-PROCESSING PARAMETERS
 debug_mode: True # debug_mode - save pairs as both npy and jpeg
-change_detection: True # please leave as True for this branch
-tiles_tr: [1,3,5,8,11,13,14,20] # tiles for training
-tiles_val: [6,19] # tiles for validation
-patch_size: 128
+change_detection: True # change_detection - if True, uses T1 + T2. if False, use only T2.
+tiles_tr: [1, 3, 8, 11, 13, 20] # tiles for training
+tiles_val: [6, 18] # tiles for validation
+patch_size: 128 
 overlap: 0.7 # used to calculate stride
-save_patches: True # if False, save only image pairs (expected input from pix2pix net)
+save_patches: True # if False, save only image pairs (input for pix2pix)
 save_tiles: False # save testing tiles 
 save_image_pairs: True
 max_input_samples: 10000 # maximo de itens a serem gerados para entrada do pix2pix treinado
 goal_percentage: 2 # minimum percentage when using dilation
 min_percentage: 2 # minimum NEW deforestation required per patch (new deforestation - class 1)
-root_path: '/Users/amanda/Documents/GitHub/Sentinel2/' # path to images
-output_path: '/Users/amanda/Documents/GitHub/samples/' # path to save patches
+root_path: 'D:\amandalucs\Sentinel2\' # path to images
+output_path: 'D:\amandalucs\Samples\' # path to save patches
 load_scaler: False # if True, will load provided scaler to use for normalization
-scaler_path: '/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/minmax_scaler.bin'
+scaler_path: 'D:\amandalucs\Samples\minmax_scaler.bin'
 lim_x: 17700 # 10000
 lim_y: 9200 # 7000
 type_norm: 3 # 0: MinMax(0,255), 1: Standard, 2: MinMax(0,1), 3: MinMax(-1,1)
 channels: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] 
-debug_channels: [0, 1, 3]
+debug_channels: [0, 1, 2]
 # 0 - blue *
 # 1 - green *
 # 2 - red
@@ -32,21 +32,19 @@ debug_channels: [0, 1, 3]
 # 9 - SWIR (2.190um)
 
 # TRAINING PARAMETERS - PIX2PIX
-# training_name: 'v0-128'
-data_path: '/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/'
-# data_path: '/share_alpha_2/amandalucas/pix2pix/Sentinel2/v0_256/samples_change_detection_true_two_classes_false'
-training_steps: 400000
-checkpoint_steps: 40000 # interval to save checkpoint
+data_path: 'D:\amandalucs\Samples\' 
+training_steps: 250000
+checkpoint_steps: 25000 # interval to save checkpoint
 batch_size: 1 # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
-gen_loss_type: 'default' # 'default' or 'weighted_l1'
-lambda: 100 # weight on L1 term
+gen_loss_type: 'weighted_l1' # 'default' or 'weighted_l1'
 gan_weight: 1.0 # weight on GAN term
-alpha: 5.32 # weigth on L1 mask term. used when loss if 'weighted_l1'
-beta: 1.23 # weigth on L1 out term.  used when loss if 'weighted_l1'
+alpha: 5.51 # weigth on L1 mask term. used when loss if 'weighted_l1'
+beta: 0.5 # weigth on L1 out term.  used when loss if 'weighted_l1'
+lambda: 100 # weight on L1 term. l1_loss =  lambda * (alpha * inside_mask + beta * outside_mask)
 image_width: 128
 image_height: 128
 output_channels: 10
-checkpoint_folder: '' # used when running with --inference flag
+checkpoint_folder: '' #'D:\amandalucs\pix2pix\18_03_2022_00_19_11\training_checkpoints' # used when running with --inference flag
 #buffer_size: 100
 ngf: 64 # number of generator filters in first conv layer
 ndf: 64 # number of discriminator filters in first conv layer
@@ -56,15 +54,16 @@ residual_generator: False # use residual blocks instead of skip connections
 number_residuals: 3 
 drop_blocs: 0 # blocks to be dropped in encoder/decoder; maximum supported (although not recommended): 7
 synthetic_masks_path: 'trained_pix2pix_input/'
-pix2pix_output_path: ''
-slow_discriminator: False # if True, Generator params are optimized twice in the same training loop
+pix2pix_output_path: 'D:\amandalucs\'
+slow_discriminator: True # if True, Generator params are optimized twice in the same training loop
 fix_erratas: True
 
 # TRAINING PARAMETERS - UNET
-unet_data_path: '/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/'
-synthetic_data_path: '' #'/Users/amanda/Documents/GitHub/samples/change_detection_true_two_classes_false/pix2pix/07_03_2022_23_34_11/synthetic_data_test/' #'/share_alpha_2/amandalucas/pix2pix/samples_patch_size_128/change_detection_true_two_classes_false/pix2pix/16_11_2021_19_32_40/synthetic_data_random/'
-pix2pix_max_samples: 500
-training_output_path: '/unet-results/'
+unet_data_path: 'D:\amandalucs\Samples\change_detection_true'
+synthetic_data_path: 'D:\amandalucs\pix2pix\31_03_2022_21_06_12_inference\synthetic_data_random'
+selected_synt_file: './filtered_imgs3.txt' # selected patches text file - if parsed, we use images from this txt
+pix2pix_max_samples: 10000
+training_output_path: 'D:\amandalucs\unet-results\'
 input_channels: 20
 epochs_unet: 100
 batch_size_unet: 32
@@ -74,6 +73,7 @@ patience_value: 10
 type_norm_unet: 1
 lr_unet: 0.001 
 beta1_unet: 0.9
-augment_data: False
+augment_data: False # classic data augmentation
 run_inference_on_cpu: True
-unet_testing_path: 'C:/Users/amandalucs/Documents/Github/unet-results/2022_03_11_21_05_47_augmented'
+unet_testing_path: 'D:\amandalucs\unet-results\synt_only_on_train\'
+combine_t2: True # if True, u-net uses mask to combine real and fake t2 according to classes (0, 2 -> real t2; 1 -> fake t2)

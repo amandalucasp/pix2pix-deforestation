@@ -15,7 +15,7 @@ stream = open('./config.yaml')
 config = yaml.load(stream, Loader=yaml.CLoader)
 
 stride = int((1 - config['overlap']) * config['patch_size'])
-tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val']))) # [7,8] 
+tiles_ts = (list(set(np.arange(20)+1)-set(config['tiles_tr'])-set(config['tiles_val'])))
 
 print(config)
 os.makedirs(config['output_path'], exist_ok=True)
