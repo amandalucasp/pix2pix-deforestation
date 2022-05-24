@@ -2,6 +2,7 @@ import numpy as np
 from PIL import Image
 import cv2
 import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
 
 def get_ndvi(s2_image):
     # s2_image bands:
@@ -36,12 +37,30 @@ def plot_image(plot_list, columns, rows, title, filename=None, pad=1):
   plt.close(fig)
 
 
-def discretize_forest_region(image, mask, num_bins=2, s=''):
+def image_quantization_kmeans(image, num_clusters):
+  h, w = image.shape
+  im = image.reshape((w*h, 1))
+  kmeans = KMeans(n_clusters=num_clusters).fit(im)
+  labels = kmeans.labels_
+  centers = kmeans.cluster_centers_
+  quantized = centers[labels].reshape(image.shape).astype('float32')
+  return quantized
 
-    #deforestation_mask = mask == 0
-    new_deforestation_mask = mask == 0
-    old_deforestation_mask = mask == 1
-    deforestation_mask = (new_deforestation_mask | old_deforestation_mask)
+
+def discretize_ndvi(ndvi_image, num_bins):
+  imhist, bins = np.histogram(ndvi_image.flatten(), nbr_bins)
+  cdf = imhist.cumsum() #cumulative distribution function
+  cdf = 255 * cdf / cdf[-1] #normalize
+  # todo
+  return ndvi_eq
+
+
+def discretize_forest_region(image, mask, num_bins=4, s=''):
+
+    deforestation_mask = mask == 1
+    #new_deforestation_mask = mask == 1
+    #old_deforestation_mask = mask == 2
+    #deforestation_mask = (new_deforestation_mask | old_deforestation_mask)
 
     new_image = np.zeros_like(image)
     new_image[deforestation_mask] = image[deforestation_mask]
@@ -49,7 +68,7 @@ def discretize_forest_region(image, mask, num_bins=2, s=''):
     print('ndvi values:', np.min(ndvi), np.max(ndvi))
 
     ndvi = ndvi.astype(np.float32) 
-    ndvi_eq = np.floor(ndvi*num_bins+0.5)/(num_bins - 1)
+    ndvi_eq = image_quantization_kmeans(ndvi, num_bins)
     values = np.unique(ndvi_eq)
     print('ndvi values:', values)
 
@@ -98,9 +117,9 @@ np.random.seed(0)
 
 for i in np.random.randint(0,500,15):
     i = str(i)
-    im = np.load('D:\\amandalucs\\Samples\\change_detection_true\\training_data\\imgs\\' + i + '.npy')
+    im = np.load('D:\\amandalucs\\Samples\\training_data\\imgs\\' + i + '.npy')
     h, w, c = im.shape
     image = im[:,:,c//2:]
-    mask = np.load('D:\\amandalucs\\Samples\\change_detection_true\\training_data\\masks\\' + i + '.npy')
+    mask = np.load('D:\\amandalucs\\Samples\\training_data\\masks\\' + i + '.npy')
 
     image_eq = discretize_forest_region(image, mask, 3, i)

@@ -143,7 +143,15 @@ def get_ndvi(s2_image):
   return ndvi
 
 
-def discretize_forest_region(image, mask, num_bins=2, s=''):
+def discretize_ndvi(ndvi_image, num_bins):
+  imhist, bins = np.histogram(ndvi_image.flatten(), nbr_bins)
+  cdf = imhist.cumsum() #cumulative distribution function
+  cdf = 255 * cdf / cdf[-1] #normalize
+  # todo finalizar essa funcao 
+  return ndvi_eq
+
+
+def discretize_forest_region(image, mask, num_bins=4, s=''):
 
   mask = mask[:, :, -1]
   deforestation_mask = mask == 1
@@ -156,7 +164,7 @@ def discretize_forest_region(image, mask, num_bins=2, s=''):
   #print('ndvi values:', np.min(ndvi), np.max(ndvi))
 
   ndvi = ndvi.astype(np.float32) 
-  ndvi_eq = np.floor(ndvi*num_bins+0.5)/(num_bins - 1)
+  ndvi_eq = discretize_ndvi(ndvi, num_bins)
   values = np.unique(ndvi_eq)
   #print('ndvi values:', values)
 
