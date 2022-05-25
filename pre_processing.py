@@ -38,7 +38,7 @@ val_out_path = config['output_path'] + '/validation_data'
 tst_out_path = config['output_path'] + '/testing_data'
 
 # Create tile mask
-mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5, 4))
+mask_tiles = create_mask(final_mask.shape[0], final_mask.shape[1], grid_size=(5, 4)) # mask_tiles: mascara onde cada pixel recebe o valor do indice do retangulo correspondente
 image_array = image_array[:mask_tiles.shape[0], :mask_tiles.shape[1],:]
 final_mask = final_mask[:mask_tiles.shape[0], :mask_tiles.shape[1]]
 

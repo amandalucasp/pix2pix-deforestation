@@ -144,9 +144,9 @@ def get_ndvi(s2_image):
 
 
 def discretize_ndvi(ndvi_image, num_bins):
-  imhist, bins = np.histogram(ndvi_image.flatten(), nbr_bins)
-  cdf = imhist.cumsum() #cumulative distribution function
-  cdf = 255 * cdf / cdf[-1] #normalize
+  #imhist, bins = np.histogram(ndvi_image.flatten(), nbr_bins)
+  #cdf = imhist.cumsum() #cumulative distribution function
+  #cdf = 255 * cdf / cdf[-1] #normalize
   # todo finalizar essa funcao 
   return ndvi_eq
 
@@ -154,36 +154,31 @@ def discretize_ndvi(ndvi_image, num_bins):
 def discretize_forest_region(image, mask, num_bins=4, s=''):
 
   mask = mask[:, :, -1]
-  deforestation_mask = mask == 1
-  old_deforestation_mask = mask == 2
+  deforestation_mask = mask == 1 # new deforestation
+  old_deforestation_mask = mask == 2 # old deforestation
   #deforestation_mask = (new_deforestation_mask | old_deforestation_mask)
 
-  new_image = np.zeros_like(image)
-  new_image[deforestation_mask] = image[deforestation_mask]
+  new_image = np.zeros_like(image) # crio uma matriz zerada
+  new_image[deforestation_mask] = image[deforestation_mask] # copio os pixels da imagem original, apenas da regiao de interesse
   ndvi = get_ndvi(new_image) # where mask is 0, will have the value of 0
   #print('ndvi values:', np.min(ndvi), np.max(ndvi))
 
   ndvi = ndvi.astype(np.float32) 
-  ndvi_eq = discretize_ndvi(ndvi, num_bins)
+  #ndvi_eq = discretize_ndvi(ndvi, num_bins) # ex 4 bins: -0.5, 0, 0.5, 1.0
+  ndvi_eq = np.floor(ndvi*num_bins+0.5)/(num_bins - 1)
   values = np.unique(ndvi_eq)
-  #print('ndvi values:', values)
-
-  # plot
-  #result = (ndvi_eq *0.5 + 0.5) * 127.5
-  #result[~deforestation_mask] = 0
-  #cv2.imwrite('./sample_' + str(s) + '_ndvi.png', result)
 
   h, w, channels = new_image.shape
   
+# values = [-0.5, 0, 0.5, 1.0]
+
   # for each channel
   for channel in np.arange(channels):
       current_channel = new_image[:,:,channel].copy()
       # for each ndvi equalized value
-      for value in values:
+      for value in values: # -0.5
           # get value mask (where pixel value == value)
-          current_bin_mask = (ndvi_eq == value)
-          # get indices
-          current_bin_idx = np.stack(np.nonzero(current_bin_mask), axis=-1)
+          current_bin_mask = (ndvi_eq == value) # mascara booleana -> true where == -0.5, false otherwise
           # mask pixels that are not from this bin
           current_bin_pixels = current_channel*current_bin_mask.astype('float32') 
           # mask forest pixels from mean

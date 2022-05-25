@@ -7,7 +7,7 @@ patch_size: 128
 overlap: 0.7 # used to calculate stride
 save_patches: True # if False, save only image pairs (input for pix2pix)
 save_tiles: False # save testing tiles 
-save_image_pairs: True
+save_image_pairs: True # save input for pix2pix
 max_input_samples: 10000 # maximo de itens a serem gerados para entrada do pix2pix treinado
 goal_percentage: 2 # minimum percentage when using dilation
 min_percentage: 2 # minimum NEW deforestation required per patch (new deforestation - class 1)
